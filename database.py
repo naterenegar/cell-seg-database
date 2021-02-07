@@ -181,7 +181,6 @@ class Database(object):
     def cmd_handler_create_anns(self, args):
         # commmand is "ann-create"
         exp = int(input("Please enter desired experiment number: "))
-        num_anns = int(input("Please enter number of annotations: "))
         npz_gran = int(input("Please enter number of images per NPZ: ")) 
 
         # grab all image metadata in relevant experiment
@@ -191,7 +190,9 @@ class Database(object):
 
         # This loop lets user configure ROI options
         acceptable = 'n'
+        num_images = 1
         while acceptable == 'n':
+            num_anns = int(input("Please enter number of annotations: "))
             ann_res = input("Please enter annotation resolution in form \"<width>, <height>\": ")
             ann_w, ann_h = ann_res.split(',')
             ann_w = int(ann_w)
@@ -210,28 +211,43 @@ class Database(object):
             maximum_ts = max_ws * max_hs
             time_series = int(input("Please enter number of time series (maximum = " + str(maximum_ts) + "): "))
             time_stride = int(input("Please enter time series stride (number of images between each step in series): "))
+            num_images = (num_anns // time_series) * time_stride
 
             starts = []
             for i in range(time_series):
                 starts.append((int(w_starts[i % max_ws]), int(h_starts[i // max_ws])))
 
-            fig,ax = plt.subplots(1)
-            im = cv2.imread(exp_images[0]['path']) 
-            im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-            ax.imshow(im)
+            fig,ax = plt.subplots(ncols=2, nrows=1, sharey=True)
+            ax = ax.ravel()
+            im0 = cv2.imread(exp_images[0]['path']) 
+            im0 = cv2.cvtColor(im0, cv2.COLOR_BGR2RGB)
+            im1 = cv2.imread(exp_images[num_images-1]['path']) 
+            im1 = cv2.cvtColor(im1, cv2.COLOR_BGR2RGB)
+            ax[0].imshow(im0)
+            ax[0].set_title('First image')
+            ax[1].imshow(im1)
+            ax[1].set_title('Last image')
+
             i = 1
             for start in starts:
-                rect = patches.Rectangle(start,ann_w,ann_h,linewidth=1,edgecolor='g',facecolor='none')
-                ax.add_patch(rect)
-                ax.annotate(str(i), xy=(start[0] + int(ann_w / 2), start[1] + int(ann_h / 2)), 
-                            color='b', fontsize='x-large', ha='center', va='center') 
+                for a in ax:
+                    rect = patches.Rectangle(start,ann_w,ann_h,linewidth=1,edgecolor='g',facecolor='none')
+                    a.add_patch(rect)
+                    a.annotate(str(i), xy=(start[0] + int(ann_w / 2), start[1] + int(ann_h / 2)), 
+                                color='b', fontsize='x-large', ha='center', va='center') 
                 i = i + 1
 
-            print("Showing generated ROIs...")
+
+            print("With these settings, the annotations will go " + str(num_images) + " images into the experiment.")
+            print("Showing generated ROIs for first and last image...")
             plt.show()
+            acceptable = input("Are these settings acceptable? [y/n]: ")
 
-            acceptable = input("Were those ROIs acceptable? [y/n]: ")
+        num_npzs = num_anns // num_images
+        print("Generating " + str(num_npzs) + " NPZs...") 
 
+        # Generate a name for each NPZ
+        # Put images into each NPZ by time series
 
 
     # How this is going to work:
