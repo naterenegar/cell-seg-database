@@ -160,25 +160,6 @@ class Database(object):
         self.db_dict['info']['initialized'] = True
         self.db_dict['data']['experiments'] = exps
 
-    # TODO: 
-    # Give number of desired images as well as images per time sequence.
-    # This function will search through the database and look for images that
-    # fit the criteria. you can also choose a granularity for how often to
-    # create an NPZ. This function also creates all of the necessary metadata
-    # for annotation tracking.
-
-    # Today:
-    #   - Given number of annotations, creates time series and separate NPZs
-    #   while checking to make sure none of them overlap. We'll confirm with
-    #   the user the location of each time series before creating the NPZs 
-    #       1. get desired # of annotations, time series, annotation resolution, npz granularity from user
-    #           - # of annotations: total number of annotations to create
-    #           - # of time series: number of consecutive sequences to create
-    #           (e.g. 2 time series w/ 100 annotations creates 2 sets of 50
-    #           looking at two different spots on the image)
-    #           - annotation resolution (default 256x256): image size of each annotation
-    #           - npz granularity: number of annotations to pack into each NPZ file. 
-
     # TODO: Change this to select annotation by hour range and give number of
     # sample streams (i.e. time sequences)
     def cmd_handler_create_anns(self, args):
@@ -286,7 +267,7 @@ class Database(object):
         #        y2)) and the two (x,y) pairs define a rectangle, so x1 < x2
         #        and y1 < y2
 
-        return
+        return # json dicts
 
     # How this is going to work:
     #  - One JSON file in the anns directory that contains information about
