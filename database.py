@@ -256,10 +256,18 @@ class Database(object):
         # TODO: Put sample images into each NPZ by time series, so consecutive
         # images are localized in space and not in time
 
+        # TODO: Create metadata on an NPZ basis as well. Should just be a list
+        # of NPZs, number of images in each, and a boolean whose value
+        # corresponds to the completeness of annotation (true = all annotated,
+        # false = not all annotated)
+
         # TODO: Generate NPZ JSON data for annotations
         #   Includes:
         #      - npz_path: path to NPZ file containig the annotated sample image
         #      - annID: unique integer. perhaps next unique stored at top level
+        #      - annotationComplete: boolean indicating whether chosen sample image has been labeled
+        #      - annotationType: (hand, machine)
+        #      - annotator: if type is 'hand', then this is a name. if 'machine', it's the name of the model used to predict an annotation
         #      - size: resolution
         #      - time: hours
         #      - experiment: integer
