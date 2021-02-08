@@ -178,6 +178,9 @@ class Database(object):
     #           looking at two different spots on the image)
     #           - annotation resolution (default 256x256): image size of each annotation
     #           - npz granularity: number of annotations to pack into each NPZ file. 
+
+    # TODO: Change this to select annotation by hour range and give number of
+    # sample streams (i.e. time sequences)
     def cmd_handler_create_anns(self, args):
         # commmand is "ann-create"
         exp = int(input("Please enter desired experiment number: "))
@@ -217,6 +220,7 @@ class Database(object):
             for i in range(time_series):
                 starts.append((int(w_starts[i % max_ws]), int(h_starts[i // max_ws])))
 
+            # Load first and last image in sampling range
             fig,ax = plt.subplots(ncols=2, nrows=1, sharey=True)
             ax = ax.ravel()
             im0 = cv2.imread(exp_images[0]['path']) 
@@ -228,6 +232,7 @@ class Database(object):
             ax[1].imshow(im1)
             ax[1].set_title('Last image')
 
+            # Draw bounding boxes around generated ROIs
             i = 1
             for start in starts:
                 for a in ax:
@@ -237,7 +242,7 @@ class Database(object):
                                 color='b', fontsize='x-large', ha='center', va='center') 
                 i = i + 1
 
-
+            # Ask user to confirm settings
             print("With these settings, the annotations will go " + str(num_images) + " images into the experiment.")
             print("Showing generated ROIs for first and last image...")
             plt.show()
@@ -246,9 +251,34 @@ class Database(object):
         num_npzs = num_anns // num_images
         print("Generating " + str(num_npzs) + " NPZs...") 
 
-        # Generate a name for each NPZ
-        # Put images into each NPZ by time series
+        # TODO: Generate a name for each NPZ
 
+        # TODO: Put sample images into each NPZ by time series, so consecutive
+        # images are localized in space and not in time
+
+        # TODO: Generate NPZ JSON data for annotations
+        #   Includes:
+        #      - npz_path: path to NPZ file containig the annotated sample image
+        #      - annID: unique integer. perhaps next unique stored at top level
+        #      - size: resolution
+        #      - time: hours
+        #      - experiment: integer
+        #      - cellType: string
+        #      - numberOfCells: of each class if more than one class
+        #      - sourceImage
+        #      - sourceOffset (integer x, integer y), location of top left pixel of annotation in source
+
+        # TODO: For each NPZ, take a subset of all the generated annotation
+        #       metadata and store it in the NPZ. The order of entries should
+        #       correspond to the order of images in the NPZ 
+
+        # TODO: Update source metadata
+        #      - each image contains an "annotations" field that is a list of
+        #        tuples, where the tuple is (<annotation_id>, (x1, y1), (x2,
+        #        y2)) and the two (x,y) pairs define a rectangle, so x1 < x2
+        #        and y1 < y2
+
+        return
 
     # How this is going to work:
     #  - One JSON file in the anns directory that contains information about
