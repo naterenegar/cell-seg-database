@@ -3,12 +3,11 @@ import os
 import json
 import numpy as np
 import cv2
+from datetime import datetime
 import matplotlib.pyplot as plt
+from matplotlib.widgets import RectangleSelector, Slider, Button, RadioButtons, TextBox
 import matplotlib.patches as patches
-
-
-# Nice to haves to get to if you have time:
-#   - Pack/Unpack NPZs 
+from matplotlib.backend_bases import MouseEvent
 
 # TODO: Add support for importing annotations
 
@@ -19,10 +18,6 @@ import matplotlib.patches as patches
 # denotes what steps have been taken. This is fine for now. Alternatively,
 # to maintain consistency throughout the database, we could, upon init,
 # take all images in a experiment through preprocessing steps
-
-# TODO: I want to be able to open up all of the raw images corresponding
-# to images in an NPZ in a matplotlib window. This is useful because you
-# can go back and forth, look at other contexts, etc
 
 class Database(object):
 
@@ -70,10 +65,6 @@ class Database(object):
     def is_initialized(self):
         return self.db_dict['info']['initialized']
 
-   
-    # NOTE: This currently assumes all images in a experiment are the same
-    # resolution. We can add an option to check for this if necessary, but I
-    # think it is a reasonable assumption for now
     def init_database(self, top_dir='db', exp_dir='exps', ann_dir='anns', exp_prefix='exp'):
         if not (os.path.exists(top_dir) and os.path.exists(os.path.join(top_dir, exp_dir))):
             print("ERROR: Provided invalid paths:", top_dir, ",", os.path.join(top_dir, exp_dir))
@@ -99,6 +90,7 @@ class Database(object):
 
         for exp in exps:
             exps[exp]['datatypes'] = os.listdir(exps[exp]['full_path'])
+            exps[exp]['duration'] = 0
             for datatype in exps[exp]['datatypes']:
                 exps[exp][datatype] = {}
 
@@ -121,6 +113,7 @@ class Database(object):
                 res = cv2.imread(os.path.join(image_dir, image_list[0]))
                 h, w, _ = res.shape
 
+                max_time = 0
                 img_array = []
                 for img in image_list:
                     name = img
@@ -130,12 +123,14 @@ class Database(object):
                     time = name.split(exp + '_t')[1].split('.')[0]
                     nums = re.search('([0-9]+)_([0-9]+).*', time) 
                     time = float(nums.group(1)) + (float(nums.group(2)) / 1000)
+                    max_time = time if time > max_time else max_time
                     annotations = [] # tuples of (path, (x1, y1, x2, y2)) to find annotation and rectangle within self
                     image_dict = {'name': name, 'resolution': [w, h], 'source_exp': exp, 'path': full_img_path,
                             'cell_type': cell_type, 'time': time, 'annotations': annotations }
                     img_array.append(image_dict)
                 img_array.sort(key=lambda x: x['time'])       
-               
+              
+                exps[exp]['duration'] = max_time
                 exps[exp]['images']['image_array'] = img_array
 
         ann_dir = os.path.join(top_dir, ann_dir)
@@ -160,79 +155,247 @@ class Database(object):
         self.db_dict['info']['initialized'] = True
         self.db_dict['data']['experiments'] = exps
 
-    # TODO: Change this to select annotation by hour range and give number of
-    # sample streams (i.e. time sequences)
+    # This is a behemoth of a function... maybe consider splitting it up into
+    # helpers?
     def cmd_handler_create_anns(self, args):
-        # commmand is "ann-create"
-        exp = int(input("Please enter desired experiment number: "))
-        npz_gran = int(input("Please enter number of images per NPZ: ")) 
 
-        # grab all image metadata in relevant experiment
-        exp = 'exp' + ('0' + str(exp) if exp < 10 else str(exp))
-        exp_images = self.db_dict['data']['experiments'][exp]['images']['image_array']
-        w, h = exp_images[0]['resolution']
+        # This gets the experiment number 
+        valid_exp = False
+        while valid_exp == False:
+            # grab all image metadata in relevant experiment
+            try:
+                exp = int(input("Please enter desired experiment number: "))
+                exp = 'exp' + ('0' + str(exp) if exp < 10 else str(exp))
+                exp_images = self.db_dict['data']['experiments'][exp]['images']['image_array']
+                num_exp_images = self.db_dict['data']['experiments'][exp]['images']['num_images']
+                duration = self.db_dict['data']['experiments'][exp]['duration'] 
+                h, v = exp_images[0]['resolution']
+                print(exp, "has", self.db_dict['data']['experiments'][exp]['duration'], 
+                        "hours of data, consisting of", num_exp_images, "images.")
+                valid_exp = True
+            except (KeyError, ValueError) as e:
+                print("You entered an invalid experiment number. Valid numbers are:")
+                exp_strings = list(self.db_dict['data']['experiments'].keys())
+                exp_strings = [int(x.split('exp')[1]) for x in exp_strings]
+                print(str(exp_strings))
 
-        # This loop lets user configure ROI options
-        acceptable = 'n'
-        num_images = 1
-        while acceptable == 'n':
-            num_anns = int(input("Please enter number of annotations: "))
-            ann_res = input("Please enter annotation resolution in form \"<width>, <height>\": ")
-            ann_w, ann_h = ann_res.split(',')
-            ann_w = int(ann_w)
-            ann_h = int(ann_h)
-            w_strech = float(input("Please enter horizontal spacing factor (min 1): "))
-            h_strech = float(input("Please enter vertical spacing factor (min 1): "))
-            w_strech = 1 if w_strech < 1 else w_strech
-            h_strech = 1 if h_strech < 1 else h_strech
+        # Get start and ending hours
+        times = [img['time'] for img in exp_images]
 
-            # generate equally spaced tuples by default
-            max_ws = (w - 2 * ann_w) // int(ann_w * w_strech)
-            max_hs = (h - 2 * ann_h) // int(ann_h * h_strech)
-            w_starts = np.linspace(ann_w, w - 2*ann_w, max_ws)
-            h_starts = np.linspace(ann_h, h - 2*ann_h, max_hs) 
+        fig,ax = plt.subplots(ncols=2, nrows=1, sharey=True, sharex=True)
+        ax = ax.ravel()
+        im0 = cv2.imread(exp_images[0]['path']) 
+        im0 = cv2.cvtColor(im0, cv2.COLOR_BGR2RGB)
+        im1 = cv2.imread(exp_images[-1]['path']) 
+        im1 = cv2.cvtColor(im1, cv2.COLOR_BGR2RGB)
+        artist_0 = ax[0].imshow(im0)
+        ax[0].set_title('First image at time = ' + str(times[0]) + " hours")
+        artist_1 = ax[1].imshow(im1)
+        ax[1].set_title('Last image at time = ' + str(times[-1]) + " hours")
+    
+        axcolor = 'lightgoldenrodyellow'
+        start_ax = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
+        end_ax   = plt.axes([0.25, 0.10, 0.65, 0.03], facecolor=axcolor)
+        update_ax = plt.axes([0.25, 0.025, 0.1, 0.04])
+        next_ax = plt.axes([0.8, 0.025, 0.1, 0.04])
 
-            maximum_ts = max_ws * max_hs
-            time_series = int(input("Please enter number of time series (maximum = " + str(maximum_ts) + "): "))
-            time_stride = int(input("Please enter time series stride (number of images between each step in series): "))
-            num_images = (num_anns // time_series) * time_stride
+        s_start = Slider(start_ax, 'Start time (hrs)', times[0], times[-1], valinit=times[0], valstep=(times[1] - times[0]))
+        s_end   = Slider(end_ax, 'End time (hrs)', times[0], times[-1],valinit=times[-1], valstep=(times[1] - times[0]))
+        update = Button(update_ax, 'Update', color=axcolor, hovercolor='0.975')
+        next_button = Button(next_ax, 'Next', color=axcolor, hovercolor='0.975')
+
+        def update_start(val):
+            ts = s_start.val
+            te = s_end.val
+            if ts > te:
+                s_end.set_val(ts)
+                
+        def update_end(val):
+            ts = s_start.val
+            te = s_end.val
+            if te < ts:
+                s_start.set_val(te)
+                
+        def get_closest_time_idx(val):
+            cl_time, cl_idx = 0, 0
+            for idx, time in list(enumerate(times)):
+                if (abs(val - time) < abs(cl_time - time)):
+                    cl_time = time
+                    cl_idx = idx
+
+            return cl_idx, cl_time
+
+        def update_images(event):
+            s_idx, st = get_closest_time_idx(s_start.val)
+            e_idx, et = get_closest_time_idx(s_end.val)
+            s_start.set_val(st)
+            s_end.set_val(et)
+
+            im0 = cv2.imread(exp_images[s_idx]['path']) 
+            im0 = cv2.cvtColor(im0, cv2.COLOR_BGR2RGB)
+            im1 = cv2.imread(exp_images[e_idx]['path']) 
+            im1 = cv2.cvtColor(im1, cv2.COLOR_BGR2RGB)
+            artist_0.set_data(im0)
+            ax[0].set_title('First image at time = ' + str(st) + " hours")
+            artist_1.set_data(im1) 
+            ax[1].set_title('Last image at time = ' + str(et) + " hours")
+
+        def proceed(event):
+            update_images(None)
+            plt.close()
+
+        s_start.on_changed(update_start)
+        s_end.on_changed(update_end)
+        update.on_clicked(update_images)
+        next_button.on_clicked(proceed)
+        plt.show()
+
+        start_ax.remove()
+        end_ax.remove()
+        update_ax.remove()
+        next_ax.remove()
+
+        start_idx, start_hr = get_closest_time_idx(s_start.val)
+        end_idx, end_hr = get_closest_time_idx(s_end.val) 
+
+        # Set up figure for ROI settings
+        fig,ax = plt.subplots(ncols=2, nrows=1, sharey=True, sharex=True)
+        ax = ax.ravel()
+        im0 = cv2.imread(exp_images[start_idx]['path']) 
+        im0 = cv2.cvtColor(im0, cv2.COLOR_BGR2RGB)
+        im1 = cv2.imread(exp_images[end_idx]['path']) 
+        im1 = cv2.cvtColor(im1, cv2.COLOR_BGR2RGB)
+        artist_0 = ax[0].imshow(im0)
+        ax[0].set_title('First image at time = ' + str(start_hr) + " hours")
+        artist_1 = ax[1].imshow(im1)
+        ax[1].set_title('Last image at time = ' + str(end_hr) + " hours")
+
+        # set up new axes, sliders, and buttons for annotations
+        h_grid_ax = plt.axes([0.15, 0.10, 0.20, 0.03], facecolor=axcolor)
+        v_grid_ax = plt.axes([0.15, 0.15, 0.20, 0.03], facecolor=axcolor)
+        h_res_ax = plt.axes([0.50, 0.10, 0.05, 0.03])
+        v_res_ax = plt.axes([0.50, 0.15, 0.05, 0.03])
+        h_pad_ax = plt.axes([0.70, 0.10, 0.05, 0.03])
+        v_pad_ax = plt.axes([0.70, 0.15, 0.05, 0.03])
+        update_ax = plt.axes([0.15, 0.05, 0.05, 0.03]) 
+        stride_ax = plt.axes([0.40, 0.8, 0.05, 0.03])
+
+        h_strech = Slider(h_grid_ax, 'H Grid',1,3,valinit=1, valstep=0.05)
+        v_strech = Slider(v_grid_ax, 'V Grid',1,3,valinit=1, valstep=0.05)
+        h_res = TextBox(h_res_ax, 'H Res', initial='256')
+        v_res = TextBox(v_res_ax, 'V Res', initial='256')
+        h_pad_box = TextBox(h_pad_ax, 'H Pad', initial='256')
+        v_pad_box = TextBox(v_pad_ax, 'V Pad', initial='256')
+        update_button = Button(update_ax, 'Update', color=axcolor, hovercolor='0.975')
+        stride_box = TextBox(stride_ax, 'Sampling Stride',initial='1')
+
+        # radio buttons to toggle between two modes
+
+        def draw_grid():
+            for a in ax:
+                for p in a.patches:
+                    p.set_visible(True)
+
+            fig.canvas.draw()
+
+        def clear_grid():
+            for a in ax:
+                for p in a.patches:
+                    p.set_visible(False)
+            fig.canvas.draw()
+
+        def reset_grid():
+            for a in ax:
+                a.patches = []
+
+        def get_num_rois():
+            num_rois = 0
+            for rect in ax[0].patches:
+                if rect.get_edgecolor() == (1.0, 0.0, 0.0, 1):
+                    num_rois = num_rois + 1
+            return num_rois
+
+        def click_roi(event):
+            if type(event) == MouseEvent:
+                try:
+                    click_x, click_y = event.xdata, event.ydata
+
+                    for idx, rect in list(enumerate(ax[0].patches)):
+                        xmin, ymin = rect.get_xy()
+                        xmax, ymax = xmin + rect.get_width(), ymin + rect.get_height()
+                        if ((click_x >= xmin and click_x <= xmax) and
+                            (click_y >= ymin and click_y <= ymax)):
+                                color = rect.get_edgecolor()                    
+                                clicked_color = (1.0, 0.0, 0.0, 1)
+                                if color != clicked_color:
+                                    rect.set_edgecolor('r')
+                                    ax[1].patches[idx].set_edgecolor('r')
+                                elif color == clicked_color:
+                                    rect.set_edgecolor('g')
+                                    ax[1].patches[idx].set_edgecolor('g')
+                except TypeError:
+                    pass
+      
+            num_rois = get_num_rois()
+            stride = int(stride_box.text)
+            num_sample_imgs = num_rois * ((end_idx - start_idx) // stride)
+            fig.suptitle('ROIS: ' + str(num_rois) + 
+                    '; Source Images: ' + str((end_idx - start_idx) // stride) + 
+                    '; Sample Images: ' + str(num_sample_imgs))
+
+            fig.canvas.draw_idle()
+
+        def update_grid_drawing(event):
+            reset_grid()
+
+            h_size = int(h_res.text)
+            v_size = int(v_res.text)
+            h_pad = int(h_pad_box.text)
+            v_pad = int(v_pad_box.text)
+
+            max_hs = (h - h_pad - h_size) // int(h_size * h_strech.val)
+            max_vs = (v - v_pad - v_size) // int(v_size * v_strech.val)
+            h_starts = np.linspace(h_pad, h - h_pad - h_size, max_hs)
+            v_starts = np.linspace(v_pad, v - v_pad - v_size, max_vs) 
+
+            maximum_ts = max_hs * max_vs
 
             starts = []
-            for i in range(time_series):
-                starts.append((int(w_starts[i % max_ws]), int(h_starts[i // max_ws])))
+            for i in range(maximum_ts):
+                starts.append((int(h_starts[i % max_hs]), int(v_starts[i // max_hs])))
 
-            # Load first and last image in sampling range
-            fig,ax = plt.subplots(ncols=2, nrows=1, sharey=True)
-            ax = ax.ravel()
-            im0 = cv2.imread(exp_images[0]['path']) 
-            im0 = cv2.cvtColor(im0, cv2.COLOR_BGR2RGB)
-            im1 = cv2.imread(exp_images[num_images-1]['path']) 
-            im1 = cv2.cvtColor(im1, cv2.COLOR_BGR2RGB)
-            ax[0].imshow(im0)
-            ax[0].set_title('First image')
-            ax[1].imshow(im1)
-            ax[1].set_title('Last image')
-
-            # Draw bounding boxes around generated ROIs
-            i = 1
+            # Create the grid based on the settings given to us
             for start in starts:
                 for a in ax:
-                    rect = patches.Rectangle(start,ann_w,ann_h,linewidth=1,edgecolor='g',facecolor='none')
+                    rect = patches.Rectangle(start,h_size,v_size,linewidth=1,edgecolor='g',facecolor='none')
                     a.add_patch(rect)
-                    a.annotate(str(i), xy=(start[0] + int(ann_w / 2), start[1] + int(ann_h / 2)), 
-                                color='b', fontsize='x-large', ha='center', va='center') 
-                i = i + 1
+            fig.canvas.draw_idle()
+            click_roi(None) # update ROI and image counts
+        
+        update_grid_drawing(None)
+        update_button.on_clicked(update_grid_drawing)
+        stride_box.on_submit(click_roi)
+        click_roi_id = plt.connect('button_press_event', click_roi)
 
-            # Ask user to confirm settings
-            print("With these settings, the annotations will go " + str(num_images) + " images into the experiment.")
-            print("Showing generated ROIs for first and last image...")
-            plt.show()
-            acceptable = input("Are these settings acceptable? [y/n]: ")
+        plt.show()
+        
+        stride = int(stride_box.text)
+        num_rois = get_num_rois()
+        num_sample_images = num_rois * ((end_idx - start_idx) // stride)
 
-        num_npzs = num_anns // num_images
+        # Once we get here, all ROIs we want should be defined
+        npz_gran = int(input("There will be " + str(num_sample_images) + " generated. Please enter number of sample images per NPZ: ")) 
+        num_npzs = num_sample_images // npz_gran 
         print("Generating " + str(num_npzs) + " NPZs...") 
 
         # TODO: Generate a name for each NPZ
+        # name format: datetime-exp-starthr-endhr-numimgs-firstSampleID.npz
+        for i in range(num_npzs):
+            now = datetime.now()
+            date_time = (now.strftime("%Y_%m_%d-%H_%M_%S")).split('-')[0]
+            start_hr = end_hr = "0"
+            npz_name = '-'.join([exp, start_hr, end_hr, str(npz_gran), date_time])
+            print('\t' + npz_name)
 
         # TODO: Put sample images into each NPZ by time series, so consecutive
         # images are localized in space and not in time
@@ -343,6 +506,6 @@ class Database(object):
                 cmds.sort()
                 for cmd in cmds: 
                     print("    " + cmd)
-
-    
+            except KeyboardInterrupt:
+                print("\n\nCommand aborted.\n")
 
