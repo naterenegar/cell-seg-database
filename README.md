@@ -22,4 +22,12 @@ Might look like this:
 The main reason this tool is useful for active learning is that it can automatically find annotated and unannotated sampled images to use in the loop. Previously this is done by hand.
 
 # Usage
-TODO
+Run `init_database.py` to get started. This file searchs for a `.db.json` in the working directory and creates a new database if it doesn't find one. It then asks you about the directory tree structure of your files (in my case, images).
+
+# Dependencies
+Requires `python3` and some packages:
+- matplotlib
+- numpy
+- cv2
+
+TODO: put all required packages into `pip`-style requirements.txt
