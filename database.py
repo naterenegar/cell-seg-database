@@ -1,3 +1,5 @@
+import annotation
+
 import re
 import os
 import json
@@ -22,7 +24,7 @@ from matplotlib.backend_bases import MouseEvent
 class Database(object):
 
     def __init__(self, init_filename='.db.json', autosave=True):
-        self.db_dict = {'info': {'initialized': False}, 'data': {}} # default dictionary
+        self.db_dict = {'info': {'initialized': False}, 'data': {}, 'annotations': {'num_anns': 0}} # default dictionary
         perm_string = "w+"
         if os.path.exists(init_filename):
             perm_string = "r+"
@@ -383,12 +385,51 @@ class Database(object):
         num_rois = get_num_rois()
         num_sample_images = num_rois * ((end_idx - start_idx) // stride)
 
-        # Once we get here, all ROIs we want should be defined
-        npz_gran = int(input("There will be " + str(num_sample_images) + " generated. Please enter number of sample images per NPZ: ")) 
+
+        # Construct list of annotations to be appended 
+        next_ann_ID = self.db_dict['annotations']['num_anns']
+        img_idxs = [(start_idx + i*stride) for i in range((end_idx - start_idx) // stride)] 
+        roi_corners = []
+        for rect in ax[0].patches:
+            color = rect.get_edgecolor()                    
+            clicked_color = (1.0, 0.0, 0.0, 1)
+            if color == clicked_color:
+                roi_corners.append(rect.get_xy())
+        
+        # TODO: Decide where sample image and annotation goes, then save that
+        # path to the JSON dict
+        tmp_ann = annotation.ImageAnnotation()
+        ann_list = []
+        for idx in img_idxs:
+            for offset in roi_corners:
+                print(offset)
+                d = tmp_ann.ann_dict
+                d['ann_id'] = next_ann_ID
+                d['valid'] = False
+                d['X']['ann_size'] = (int(h_res.text), int(v_res.text))
+                d['X']['source_offset'] = offset
+                d['X']['source_path'] = exp_images[idx]['path'] 
+                d['X']['source_name'] = exp_images[idx]['name']
+                ann_list.append(tmp_ann.get_dict())  
+                next_ann_ID = next_ann_ID + 1
+
+
+#        print(ann_list)
+#        exp_images
+#        start_idx
+#        stop_idx
+#        stride
+
+        # Look for any overlap between this list of annotations and the
+        # existing annotations. If there is overlap, print out where it was,
+        # and go back to main prompt
+
+
+        # Get NPZ granularity
+        npz_gran = int(input("There will be " + str(num_sample_images) + " images generated. Please enter number of sample images per NPZ: ")) 
         num_npzs = num_sample_images // npz_gran 
         print("Generating " + str(num_npzs) + " NPZs...") 
 
-        # TODO: Generate a name for each NPZ
         # name format: datetime-exp-starthr-endhr-numimgs-firstSampleID.npz
         for i in range(num_npzs):
             now = datetime.now()
@@ -396,6 +437,8 @@ class Database(object):
             start_hr = end_hr = "0"
             npz_name = '-'.join([exp, start_hr, end_hr, str(npz_gran), date_time])
             print('\t' + npz_name)
+
+
 
         # TODO: Put sample images into each NPZ by time series, so consecutive
         # images are localized in space and not in time
