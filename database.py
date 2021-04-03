@@ -1,18 +1,23 @@
+# My packges 
 import annotation
 
+# Native python packages 
 import re
 import os
 import json
+import random
+
+# Addon packages 
 import numpy as np
 import cv2
 from datetime import datetime
+
 import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector, Slider, Button, RadioButtons, TextBox
 import matplotlib.patches as patches
 from matplotlib.backend_bases import MouseEvent
 
 # TODO: Add support for importing annotations
-
 # TODO: Add warning for annotations that cannot be sourced
 
 # NOTE: Assumes images are preprocessed (e.g. aligned, cropped, normalized,
@@ -413,17 +418,9 @@ class Database(object):
                 ann_list.append(tmp_ann.get_dict())  
                 next_ann_ID = next_ann_ID + 1
 
-
-#        print(ann_list)
-#        exp_images
-#        start_idx
-#        stop_idx
-#        stride
-
         # Look for any overlap between this list of annotations and the
         # existing annotations. If there is overlap, print out where it was,
         # and go back to main prompt
-
 
         # Get NPZ granularity
         npz_gran = int(input("There will be " + str(num_sample_images) + " images generated. Please enter number of sample images per NPZ: ")) 
@@ -437,8 +434,6 @@ class Database(object):
             start_hr = end_hr = "0"
             npz_name = '-'.join([exp, start_hr, end_hr, str(npz_gran), date_time])
             print('\t' + npz_name)
-
-
 
         # TODO: Put sample images into each NPZ by time series, so consecutive
         # images are localized in space and not in time
@@ -530,6 +525,99 @@ class Database(object):
             print("WARNING: Proceeding with stray annotations. Unique datasets cannot be gauranteed")
 
         return
+
+    # Can generate unlabelled and labelled pools. Labelled pools are defined as
+    # a pool in which at least 1 pixel has an annotation... This is quite a
+    # strict definition, so maybe in the future we can add a ceiling %age on
+    # pixels annotated
+    def generate_image_pool(self, n, exps=[1, 3, 22], size=(256,256), annotated='false'):
+        i = 0
+        while i < n:
+            # Pick random experiment from list
+            exp_num = random.randint(1, len(exps))
+            exp_string = "exp" + ("0" if exp_num + 1 < 10 else "") + str(exp_num)
+
+            # Pick random image
+            img_dict = self.db_dict['data']['experiments'][exp_string]['images']
+            img_idx = random.randint(0, img_dict['num_images'] - 1)
+            img_data = img_dict['image_array'][img_idx] # is a dict with image information
+            
+            # First, determine if a subimage of the desired size is available
+            # in this image
+
+            # Algorithm for this:
+            xs = []
+            ys = []
+            for ann in img_data['annotations']:
+                x1, y1 = ann['source']
+                x2, y2 = x1 + ann['size'][0], y1 + ann['size'][1]
+                xs.append((x1, x2))
+                ys.append((y1, y2))
+            xs.sort()
+            ys.sort()
+
+            # Combine overlapping y pairs
+            for i in range(len(ys) - 1):
+                p1y1, p1y2 = ys[i]
+                p2y1, p2y2 = ys[i+1]
+                if (p1y2 >= p2y1):
+                    combined_pair = (p1y1, p2y2)
+                    del(ys[i])
+                    ys[i] = combined_pair
+        
+            # Combine overlapping x pairs
+            for i in range(len(xs) - 1):
+                p1x1, p1x2 = xs[i]
+                p2x1, p2x2 = xs[i+1]
+                if (p1x2 >= p2x1):
+                    combined_pair = (p1x1, p2x2)
+                    del(xs[i])
+                    xs[i] = combined_pair
+
+            xmax = img_data['resolution'][0]
+            ymax = img_data['resolution'][1]
+            xsc = []
+            ysc = []
+
+            # Complement ys
+            for i in range(len(ys)):
+                if (i == 0) && (ys[i][0] > 0):
+                    ysc.append((0, ys[i][0] - 1))
+                else if (i == len(ys) - 1) && (ys[i][1] < ymax - 1):
+                    ysc.append((ys[i][1] + 1, ymax - 1))
+                else:
+                    ysc.append((ys[i][1] + 1, ys[i+1][0] - 1))
+
+            # Complement xs
+            for i in range(len(xs)):
+                if (i == 0) && (xs[i][0] > 0):
+                    xsc.append((0, xs[i][0] - 1))
+                else if (i == len(xs) - 1) && (xs[i][1] < xmax - 1):
+                    xsc.append((xs[i][1] + 1, xmax - 1))
+                else:
+                    xsc.append((xs[i][1] + 1, xs[i+1][0] - 1))
+
+            xsc_cand = []
+            ysc_cand = []
+
+            for x in xsc:
+                if (x[1] - x[0] + 1 >= size[0]):
+                    xsc_cand.append(x)
+
+            for y in ysc:
+                if (y[1] - y[0] + 1 >= size[0]):
+                    ysc_cand.append(y)
+    
+            # If we go here, we've know there's a suitable image
+            if len(xsc_cand) > 0 && len(ysc_cand) > 0:
+                ypair = ysc_cand(random.randint(0, len(ysc_cand)-1))
+                xpair = xsc_cand(random.randint(0, len(xsc_cand)-1))
+                ann_tl = (xpair[0], ypair[0])
+                ann_br = (ann_tl[0] + size[0], ann_tl[1] + size[1])
+                i =  i + 1
+
+                # TODO: Get metadata
+                # TODO: Append to list
 
     # WARNING: This hands over control from the main program to the object 
     def start_command_CLI(self):
