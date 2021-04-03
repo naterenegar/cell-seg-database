@@ -530,6 +530,15 @@ class Database(object):
     # a pool in which at least 1 pixel has an annotation... This is quite a
     # strict definition, so maybe in the future we can add a ceiling %age on
     # pixels annotated
+
+    # TODO: This algorithm does not correclty find all of the regions that an
+    # image can fit into. Imagine it shines a light into the x and y axes. Any
+    # beams that make it to the other side are considered valid. Continuous
+    # strips of beams that overlap in the x and y direction are considered for
+    # image placement.  However, this algorithm fails, for example, if you have
+    # a ring of images with an unoccupied region in the center, this algorithm
+    # will not find the region in the center, and additionally will only
+    # identify the extended corners as valid regions
     def generate_image_pool(self, n, exps=[1, 3, 22], size=(256,256), annotated='false'):
         i = 0
         while i < n:
