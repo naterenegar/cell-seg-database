@@ -6,6 +6,7 @@ import re
 import os
 import json
 import random
+import copy
 
 # Addon packages 
 import numpy as np
@@ -54,6 +55,9 @@ class Database(object):
     def __del__(self):
         if self.autosave == True and self.dirty == True:
             self.save()
+
+    def get_dict(self):
+        return copy.deepcopy(self.db_dict)
 
     def save(self, dummy=None):
         self.dbf_init.close()
@@ -590,18 +594,18 @@ class Database(object):
 
             # Complement ys
             for i in range(len(ys)):
-                if (i == 0) && (ys[i][0] > 0):
+                if (i == 0) and (ys[i][0] > 0):
                     ysc.append((0, ys[i][0] - 1))
-                else if (i == len(ys) - 1) && (ys[i][1] < ymax - 1):
+                elif(i == len(ys) - 1) and (ys[i][1] < ymax - 1):
                     ysc.append((ys[i][1] + 1, ymax - 1))
                 else:
                     ysc.append((ys[i][1] + 1, ys[i+1][0] - 1))
 
             # Complement xs
             for i in range(len(xs)):
-                if (i == 0) && (xs[i][0] > 0):
+                if (i == 0) and (xs[i][0] > 0):
                     xsc.append((0, xs[i][0] - 1))
-                else if (i == len(xs) - 1) && (xs[i][1] < xmax - 1):
+                elif(i == len(xs) - 1) and (xs[i][1] < xmax - 1):
                     xsc.append((xs[i][1] + 1, xmax - 1))
                 else:
                     xsc.append((xs[i][1] + 1, xs[i+1][0] - 1))
@@ -618,7 +622,7 @@ class Database(object):
                     ysc_cand.append(y)
     
             # If we go here, we've know there's a suitable image
-            if len(xsc_cand) > 0 && len(ysc_cand) > 0:
+            if len(xsc_cand) > 0 and len(ysc_cand) > 0:
                 ypair = ysc_cand(random.randint(0, len(ysc_cand)-1))
                 xpair = xsc_cand(random.randint(0, len(xsc_cand)-1))
                 ann_tl = (xpair[0], ypair[0])
