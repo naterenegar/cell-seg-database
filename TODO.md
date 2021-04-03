@@ -20,6 +20,3 @@ Collaboration Features:
 Segmentation:
 - Determine how to incorporate temporal context clues into the networks model
   of segmentation
-
-Sensor Correlation:
-- 
