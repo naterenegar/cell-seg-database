@@ -48,7 +48,8 @@ class Database(object):
         self.cmd_handlers = {'import-anns': self.cmd_handler_import_annotation,
                              'exit': self.save,
                              'create-anns': self.cmd_handler_create_anns,
-                             'create-pool': self.cmd_handler_create_image_pool}
+                             'create-pool': self.cmd_handler_create_image_pool,
+                             'list-invalid': self.cmd_handler_list_invalid_anns}
 
         try:
             self.db_dict = json.load(self.dbf_init)
@@ -240,17 +241,59 @@ class Database(object):
             npim = np.asarray(image)
             X[i] = npim[offset[0]:offset[0]+size[0], offset[1]:offset[1]+size[1]]
 
-        np.savez(npz_path, X=X, y=np.zeros((len(seq), size[0], size[1], 1))) # y so caliban doesn't crash
-        pool_json = open(json_path, "w+")
-        final_dict = {'pool': pool_name, 'images': seq}
-        json.dump(final_dict, pool_json, indent=4)     
-
         self.db_dict['pools'][pool_name] = {
             "path": pool_path,
             "npz_path": npz_path,
             "json_path": json_path
         }
 
+
+    # Returns data associated with an image pool
+    def load_image_pool(self, pool_name):
+        retval = None
+        if pool_name in self.db_dict['pools'].keys():
+            pool_info = self.db_dict['pools'][pool_name]
+            f = np.load(pool_info['npz_path'])
+            json = json.load(pool_info['json_path'])
+            retval = (f['X'], json)
+        else:
+            print(pool_name, "does not exist in this database.")
+
+        return retval
+    
+    # Updates image pool on disk
+    def save_image_pool(self, pool_name, X, metadata):
+        if pool_name in self.db_dict['pools'].keys():
+            pool_info = self.db_dict['pools'][pool_name]
+            size = metadata[0]['size']
+            np.savez(pool_info['npz_path'], X=X, y=np.zeros((len(metadata), size[0], size[1], 1)))
+            pool_json = open(pool_info['json_path'], "w+")
+            final_dict = {'pool': pool_name, 'images': metadata}
+            json.dump(final_dict, pool_json, indent=4)     
+        else:
+            print(pool_name, "does not exist in this database.")
+
+    # Takes in list of SubImage dictionaries and adds them as blank annotations
+    def add_blank_annotations(self, ann_list):
+        next_id = self.db_dict['annotations']['num_anns']
+        anns = []
+        for a in ann_list:
+            ann = imagetypes.subimage_dict_to_ann(a)
+            ann.dict['ann_id'] = next_id
+            anns.append(ann) 
+            next_id = next_id + 1
+        
+        self.db_dict['annotations']['ann_list'].append(anns)
+        self.db_dict['annotations']['num_anns'] = next_id
+
+    def cmd_handler_list_invalid_anns(self, args):
+        invalid_count = 0
+        for ann in self.db_dict['annotations']['ann_list']:
+            if ann['valid'] == False:
+                invalid_count = invalid_count + 1
+                print(ann)
+
+        print("Of", len(self.db_dict['annotations']['ann_list']), "annotations,", invalid_count, "are invalid")
 
     def cmd_handler_import_annotation(self, args, list_call=False):
         ann_file = args
