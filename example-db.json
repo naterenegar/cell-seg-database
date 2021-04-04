@@ -51989,5 +51989,16 @@
                 "electrode_readings": {}
             }
         }
+    },
+    "annotations": {
+        "num_anns": 0,
+        "ann_list": []
+    },
+    "pools": {
+        "pool1": {
+            "path": "db/pools/pool1",
+            "npz_path": "db/pools/pool1/pool1.npz",
+            "json_path": "db/pools/pool1/pool1.json"
+        }
     }
 }

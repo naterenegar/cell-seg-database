@@ -32,8 +32,6 @@ class SubImage(object):
     
     def __init__(self):
         self.dict = {
-            'name': "",
-            'path': "",
             'size': (256, 256),
             'source_name': "",
             'source_path': "",
@@ -81,3 +79,12 @@ class ImageAnnotation(object):
     
     def get_dict(self):
         return copy.deepcopy(self.dict)
+
+def subimage_dict_to_ann(d):
+    ann = ImageAnnotation()
+    ann['X']['size'] = d['size']
+    ann['X']['source_name'] = d['source_name']
+    ann['X']['source_offset'] = d['source_offset']
+    ann['X']['source_path'] = d['source_path']
+
+    return ann
