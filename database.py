@@ -11,6 +11,7 @@ import copy
 
 # Addon packages 
 import numpy as np
+from PIL import Image
 import cv2
 from datetime import datetime
 
@@ -26,7 +27,14 @@ from datetime import datetime
 class Database(object):
 
     def __init__(self, init_filename='.db.json', autosave=True):
-        self.db_dict = {'info': {'initialized': False}, 'data': {}, 'annotations': {'num_anns': 0}} # default dictionary
+        
+        # Default dictionary
+        self.db_dict = {
+                'info': {'initialized': False}, 
+                'data': {}, 
+                'annotations': {'num_anns': 0},
+                'pools': {}}
+
         perm_string = "w+"
         if os.path.exists(init_filename):
             perm_string = "r+"
@@ -39,7 +47,8 @@ class Database(object):
 
         self.cmd_handlers = {'import-anns': self.cmd_handler_import_annotation,
                              'exit': self.save,
-                             'create-anns': self.cmd_handler_create_anns}
+                             'create-anns': self.cmd_handler_create_anns,
+                             'create-pool': self.cmd_handler_create_image_pool}
 
         try:
             self.db_dict = json.load(self.dbf_init)
@@ -68,7 +77,7 @@ class Database(object):
             retstr = retstr + str(exp) + "\n"
 
         return retstr
-  
+
     def is_initialized(self):
         return self.db_dict['info']['initialized']
 
@@ -192,6 +201,56 @@ class Database(object):
         #        tuples, where the tuple is (<annotation_id>, (x1, y1), (x2,
         #        y2)) and the two (x,y) pairs define a rectangle, so x1 < x2
         #        and y1 < y2
+
+    def cmd_handler_create_image_pool(self, args):
+        more = True
+        seq = []
+        while more:
+            imsqr = sequencer.ImageSequencer(self)
+            seq = seq + imsqr.get_sequence()
+            more_str = input("Would you like to add more images to the pool? [y/n]:")
+            if more_str.lower() != 'y':
+                more = False
+        
+        size = seq[0]['size']
+        for s in seq:
+            if s['size'] != size:
+                raise KeyboardInterrupt("All images in pool must have same size") 
+
+        pool_name = input("Please enter the image pool name: ") 
+        npz_name = pool_name + '.npz' 
+        json_name = pool_name + '.json'
+
+        pool_path = os.path.join('db/pools', pool_name)
+        npz_path = os.path.join(pool_path, npz_name)
+        json_path = os.path.join(pool_path, json_name)
+
+        if not os.path.exists(pool_path):
+            os.makedirs(pool_path)
+        else:
+            overwrite_str = input("That pool already exists. Would you like to overwrite? [y/n]:")
+            if overwrite_str != 'y':
+                raise KeyboardInterrupt("Restarting command...") 
+
+        # TODO: Change hardcoded num channels to dynamic 
+        X = np.zeros((len(seq), size[0], size[1], 3))
+        for (i, s) in enumerate(seq):
+            image = Image.open(s['source_path']) 
+            offset = s['source_offset']
+            npim = np.asarray(image)
+            X[i] = npim[offset[0]:offset[0]+size[0], offset[1]:offset[1]+size[1]]
+
+        np.savez(npz_path, X=X, y=np.zeros((len(seq), size[0], size[1], 1))) # y so caliban doesn't crash
+        pool_json = open(json_path, "w+")
+        final_dict = {'pool': pool_name, 'images': seq}
+        json.dump(final_dict, pool_json, indent=4)     
+
+        self.db_dict['pools'][pool_name] = {
+            "path": pool_path,
+            "npz_path": npz_path,
+            "json_path": json_path
+        }
+
 
     def cmd_handler_import_annotation(self, args, list_call=False):
         ann_file = args

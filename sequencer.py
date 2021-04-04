@@ -276,7 +276,4 @@ class ImageSequencer(object):
                 d['source_name'] = exp_images[idx]['name']
                 img_list.append(tmp_img.get_dict())  
 
-        for img in img_list:
-            print(img)
-
         return img_list 
