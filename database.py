@@ -283,6 +283,22 @@ class Database(object):
             if tag:
                 ann.dict['tag'].append(tag)
             anns.append(ann) 
+                
+            source_name = ann.dict['X']['source_name'].split(".")[0]
+            source_exp = source_name[0:5]
+            source_offset = ann.dict['X']['source_offset']
+        
+            source_images = None 
+            for (exp, exp_data) in self.db_dict['data']['experiments'].items():
+                if source_exp == exp:
+                    source_images = exp_data['images']['image_array']
+                    break
+              
+            if source_images:
+                for img in source_images:
+                    if source_name == img['name'].split(".")[0]:
+                        img['annotations'].append((next_id, source_offset))
+
             next_id = next_id + 1
         
         self.db_dict['annotations']['ann_list'].append(anns)
@@ -296,6 +312,34 @@ class Database(object):
                 print(ann)
 
         print("Of", len(self.db_dict['annotations']['ann_list']), "annotations,", invalid_count, "are invalid")
+
+    # Args is a list of tags
+    def cmd_handler_do_annotation(self, args):
+    
+        invalid_anns = []
+        for ann in self.db_dict['annoations']['ann_list']:
+            if ann['valid'] == False:
+                invalid_anns.append(ann)
+
+        print("Found", len(invalid_anns), "unfinished annotations")
+
+        # Look for first invalid annotation matching the criteria given, if any
+        
+
+        # Pack that annotation into an NPZ with a blank y
+
+        # Open up contextual images in ImageJ, detached (program can proceed) 
+
+        # Open up the annotation tool, attached (i.e. program halts here until
+        # annotation tool exits)
+        
+        # Ask user if they successfully comleted the annotation
+
+        # If no, done
+
+        # If yes, load NPZ, get X and y, then save them to the annotation database
+        # Mark this annotation as valid
+         
 
     def cmd_handler_import_annotation(self, args, list_call=False):
         ann_file = args
