@@ -74,7 +74,8 @@ class ImageAnnotation(object):
             'y': {
                 'path': ""
             },
-            'npzs': [] # List of NPZs paths containing this annotation 
+            'npzs': [], # List of NPZs paths containing this annotation 
+            'tags': [] # List of any additional info for querying
         }
     
     def get_dict(self):

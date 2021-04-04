@@ -274,12 +274,14 @@ class Database(object):
             print(pool_name, "does not exist in this database.")
 
     # Takes in list of SubImage dictionaries and adds them as blank annotations
-    def add_blank_annotations(self, ann_list):
+    def add_blank_annotations(self, ann_list, tag=None):
         next_id = self.db_dict['annotations']['num_anns']
         anns = []
         for a in ann_list:
             ann = imagetypes.subimage_dict_to_ann(a)
             ann.dict['ann_id'] = next_id
+            if tag:
+                ann.dict['tag'].append(tag)
             anns.append(ann) 
             next_id = next_id + 1
         
