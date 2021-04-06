@@ -8,6 +8,7 @@ import os
 import json
 import random
 import copy
+from subprocess import Popen
 
 # Addon packages 
 import numpy as np
@@ -32,7 +33,9 @@ class Database(object):
         self.db_dict = {
                 'info': {'initialized': False}, 
                 'data': {}, 
-                'annotations': {'num_anns': 0},
+                'annotations': {'num_anns': 0,
+                                'ann_list': []
+                               },
                 'pools': {}}
 
         perm_string = "w+"
@@ -49,7 +52,8 @@ class Database(object):
                              'exit': self.save,
                              'create-anns': self.cmd_handler_create_anns,
                              'create-pool': self.cmd_handler_create_image_pool,
-                             'list-invalid': self.cmd_handler_list_invalid_anns}
+                             'list-invalid': self.cmd_handler_list_invalid_anns,
+                             'do-annotation': self.cmd_handler_do_annotation}
 
         try:
             self.db_dict = json.load(self.dbf_init)
@@ -193,23 +197,13 @@ class Database(object):
             npz_name = '-'.join([str(npz_gran), date_time])
             print('\t' + npz_name)
 
-        # TODO: For each NPZ, take a subset of all the generated annotation
-        #       metadata and store it in the NPZ. The order of entries should
-        #       correspond to the order of images in the NPZ 
-
-        # TODO: Update source image metadata
-        #      - each image contains an "annotations" field that is a list of
-        #        tuples, where the tuple is (<annotation_id>, (x1, y1), (x2,
-        #        y2)) and the two (x,y) pairs define a rectangle, so x1 < x2
-        #        and y1 < y2
-
     def cmd_handler_create_image_pool(self, args):
         more = True
         seq = []
         while more:
             imsqr = sequencer.ImageSequencer(self)
             seq = seq + imsqr.get_sequence()
-            more_str = input("Would you like to add more images to the pool? [y/n]:")
+            more_str = input("There are currently " + str(len(seq)) + " images in the pool. \nWould you like to add more images to the pool? [y/n]:")
             if more_str.lower() != 'y':
                 more = False
         
@@ -239,7 +233,7 @@ class Database(object):
             image = Image.open(s['source_path']) 
             offset = s['source_offset']
             npim = np.asarray(image)
-            X[i] = npim[offset[0]:offset[0]+size[0], offset[1]:offset[1]+size[1]]
+            X[i] = npim[offset[1]:offset[1]+size[1], offset[0]:offset[0]+size[0]]
 
         self.db_dict['pools'][pool_name] = {
             "path": pool_path,
@@ -247,6 +241,7 @@ class Database(object):
             "json_path": json_path
         }
 
+        self.save_image_pool(pool_name, X, seq)
 
     # Returns data associated with an image pool
     def load_image_pool(self, pool_name):
@@ -254,8 +249,9 @@ class Database(object):
         if pool_name in self.db_dict['pools'].keys():
             pool_info = self.db_dict['pools'][pool_name]
             f = np.load(pool_info['npz_path'])
-            json = json.load(pool_info['json_path'])
-            retval = (f['X'], json)
+            json_data = json.load(open(pool_info['json_path']))
+            print(len(json_data['images']))
+            retval = (f['X'], json_data)
         else:
             print(pool_name, "does not exist in this database.")
 
@@ -274,6 +270,8 @@ class Database(object):
             print(pool_name, "does not exist in this database.")
 
     # Takes in list of SubImage dictionaries and adds them as blank annotations
+    # Lazily allocated... we don't create the annotation until the user
+    # provides it. So, a blank annotation is really just a piece of metadata
     def add_blank_annotations(self, ann_list, tag=None):
         next_id = self.db_dict['annotations']['num_anns']
         anns = []
@@ -284,25 +282,32 @@ class Database(object):
                 ann.dict['tag'].append(tag)
             anns.append(ann) 
                 
-            source_name = ann.dict['X']['source_name'].split(".")[0]
-            source_exp = source_name[0:5]
-            source_offset = ann.dict['X']['source_offset']
-        
-            source_images = None 
-            for (exp, exp_data) in self.db_dict['data']['experiments'].items():
-                if source_exp == exp:
-                    source_images = exp_data['images']['image_array']
-                    break
-              
-            if source_images:
-                for img in source_images:
-                    if source_name == img['name'].split(".")[0]:
-                        img['annotations'].append((next_id, source_offset))
+            source_img = self.find_source_from_ann(ann)
+            source_img['annotations'].append((next_id, source_offset, source_final_offset))
 
             next_id = next_id + 1
         
         self.db_dict['annotations']['ann_list'].append(anns)
         self.db_dict['annotations']['num_anns'] = next_id
+
+    def find_source_from_ann(self, ann):
+        source_name = ann.dict['X']['source_name'].split(".")[0]
+        source_exp = source_name[0:5]
+        source_offset = ann.dict['X']['source_offset']
+    
+        source_images = None 
+        for (exp, exp_data) in self.db_dict['data']['experiments'].items():
+            if source_exp == exp:
+                source_images = exp_data['images']['image_array']
+                break
+        source_final_offset = (source_offset[0] + ann.dict['X']['size'][0], 
+                               source_offset[1] + ann.dict['X']['size'][1])
+        source_img = None
+        if source_images:
+            for img in source_images:
+                if source_name == img['name'].split(".")[0]:
+                    source_image = img
+        return source_img
 
     def cmd_handler_list_invalid_anns(self, args):
         invalid_count = 0
@@ -315,30 +320,66 @@ class Database(object):
 
     # Args is a list of tags
     def cmd_handler_do_annotation(self, args):
+   
+        tag_str = ""
+        tags = []
+        for arg in args:
+            if len(arg) > 0:
+                tag_str = tag_str + str(arg).strip() + " "
+                tags.append(str(arg).strip())
+        if len(args) > 0:
+            print("Looking for annotations with these tags:", tag_str)
     
+        tag = ""
+        if len(tags) > 1:
+            print("WARNING: Only using first tag. Multi-tag search unimplemented")
+            tag = tags[0]
+
+        # First, look for unfinished annotations
         invalid_anns = []
-        for ann in self.db_dict['annoations']['ann_list']:
+        for ann in self.db_dict['annotations']['ann_list']:
             if ann['valid'] == False:
                 invalid_anns.append(ann)
+    
+        if tag != "":
+            for ann in invalid_anns:
+                if tag not in ann['tags']:
+                    invalid_anns.remove(ann) 
 
-        print("Found", len(invalid_anns), "unfinished annotations")
-
-        # Look for first invalid annotation matching the criteria given, if any
+        print("Found", len(invalid_anns), "unfinished annotations matching given criteria...")
         
+        if len(invalid_anns) > 0:
+            print("Doing first annotation on the list.")
+            ann_todo = invalid_anns[0]      
+            
+            source_img = self.find_source_from_ann(ann_todo)
+            if source_img is None:
+                print("ERROR: Could not find source image for annotation")
+                return 
 
-        # Pack that annotation into an NPZ with a blank y
+            pil_img = Image.open(source_img['source_path']) 
+            np_img = np.asarray(pil_img)
+            np_img = np.expand_dims(np_img, axis=0)
+            np.savez(".tmp.npz", X=np_img, y=np.zeros(np_img.shape[-1:] + tuple([1])))
 
-        # Open up contextual images in ImageJ, detached (program can proceed) 
+            # Get contextual images of the source image, and take subimages
+            # with padding around the annotation region. Save each of these
+            # onto disk and open them up as an image sequence in imagej
 
-        # Open up the annotation tool, attached (i.e. program halts here until
-        # annotation tool exits)
-        
-        # Ask user if they successfully comleted the annotation
+            # Open up contextual images in ImageJ, detached (program can proceed) 
+            Popen(["ImageJ-linux64"])
 
-        # If no, done
+            # Open up the annotation tool, attached (i.e. program halts here until
+            # annotation tool exits)
+            
+            # Ask user if they successfully completed the annotation
 
-        # If yes, load NPZ, get X and y, then save them to the annotation database
-        # Mark this annotation as valid
+            # If no, done
+
+            # If yes, load NPZ, get X and y, then save them to the annotation database
+            # Mark this annotation as valid
+
+        return
          
 
     def cmd_handler_import_annotation(self, args, list_call=False):
