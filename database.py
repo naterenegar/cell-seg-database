@@ -279,34 +279,36 @@ class Database(object):
             ann = imagetypes.subimage_dict_to_ann(a)
             ann.dict['ann_id'] = next_id
             if tag:
-                ann.dict['tag'].append(tag)
+                ann.dict['tags'].append(tag)
             anns.append(ann) 
-                
+            
+            source_offset = ann.dict['X']['source_offset']
+            source_final_offset = (source_offset[0] + ann.dict['X']['size'][0], 
+                                   source_offset[1] + ann.dict['X']['size'][1])
             source_img = self.find_source_from_ann(ann)
             source_img['annotations'].append((next_id, source_offset, source_final_offset))
+            self.db_dict['annotations']['ann_list'].append(ann.dict)
 
             next_id = next_id + 1
         
-        self.db_dict['annotations']['ann_list'].append(anns)
+
         self.db_dict['annotations']['num_anns'] = next_id
 
     def find_source_from_ann(self, ann):
         source_name = ann.dict['X']['source_name'].split(".")[0]
         source_exp = source_name[0:5]
         source_offset = ann.dict['X']['source_offset']
-    
+   
         source_images = None 
         for (exp, exp_data) in self.db_dict['data']['experiments'].items():
             if source_exp == exp:
                 source_images = exp_data['images']['image_array']
                 break
-        source_final_offset = (source_offset[0] + ann.dict['X']['size'][0], 
-                               source_offset[1] + ann.dict['X']['size'][1])
         source_img = None
         if source_images:
             for img in source_images:
                 if source_name == img['name'].split(".")[0]:
-                    source_image = img
+                    source_img = img
         return source_img
 
     def cmd_handler_list_invalid_anns(self, args):

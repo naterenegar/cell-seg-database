@@ -83,9 +83,9 @@ class ImageAnnotation(object):
 
 def subimage_dict_to_ann(d):
     ann = ImageAnnotation()
-    ann['X']['size'] = d['size']
-    ann['X']['source_name'] = d['source_name']
-    ann['X']['source_offset'] = d['source_offset']
-    ann['X']['source_path'] = d['source_path']
+    ann.dict['X']['size'] = d['size']
+    ann.dict['X']['source_name'] = d['source_name']
+    ann.dict['X']['source_offset'] = d['source_offset']
+    ann.dict['X']['source_path'] = d['source_path']
 
     return ann
