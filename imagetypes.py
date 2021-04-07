@@ -51,32 +51,35 @@ class SubImage(object):
 # This is a subimage that is annotated
 class ImageAnnotation(object):
 
-    def __init__(self):
-        self.dict = {
-            'ann_type': 'image',
-            'ann_id': -1,
-            'valid': False,
-            'annotator': "",
-            'annotatorType': None, # Hand annotated? or model annotated?
-            'contents': {
-                'experiment': -1,
-                'time': -1,
-                'cell_count': -1,
-                'cell_type': None
-            },
-            'X': {
-                'path': "",
-                'size': (256, 256),
-                'source_name': "",
-                'source_path': "",
-                'source_offset': (0, 0)
-            },
-            'y': {
-                'path': ""
-            },
-            'npzs': [], # List of NPZs paths containing this annotation 
-            'tags': [] # List of any additional info for querying
-        }
+    def __init__(self, init_dict=None):
+        if init_dict:
+            self.dict = init_dict
+        else:
+            self.dict = {
+                'ann_type': 'image',
+                'ann_id': -1,
+                'valid': False,
+                'annotator': "",
+                'annotatorType': None, # Hand annotated? or model annotated?
+                'contents': {
+                    'experiment': -1,
+                    'time': -1,
+                    'cell_count': -1,
+                    'cell_type': None
+                },
+                'X': {
+                    'path': "",
+                    'size': (256, 256),
+                    'source_name': "",
+                    'source_path': "",
+                    'source_offset': (0, 0)
+                },
+                'y': {
+                    'path': ""
+                },
+                'npzs': [], # List of NPZs paths containing this annotation 
+                'tags': [] # List of any additional info for querying
+            }
     
     def get_dict(self):
         return copy.deepcopy(self.dict)

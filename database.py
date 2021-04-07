@@ -8,7 +8,7 @@ import os
 import json
 import random
 import copy
-from subprocess import Popen
+from subprocess import Popen, DEVNULL, run
 
 # Addon packages 
 import numpy as np
@@ -53,7 +53,7 @@ class Database(object):
                              'create-anns': self.cmd_handler_create_anns,
                              'create-pool': self.cmd_handler_create_image_pool,
                              'list-invalid': self.cmd_handler_list_invalid_anns,
-                             'do-annotation': self.cmd_handler_do_annotation}
+                             'do-ann': self.cmd_handler_do_annotation}
 
         try:
             self.db_dict = json.load(self.dbf_init)
@@ -316,7 +316,9 @@ class Database(object):
         for ann in self.db_dict['annotations']['ann_list']:
             if ann['valid'] == False:
                 invalid_count = invalid_count + 1
-                print(ann)
+                ann_str = str(ann['ann_id']) + ": "
+                ann_str = ann_str + ann['X']['source_name'] + ", " + str(tuple(ann['X']['source_offset']))
+                print(ann_str)
 
         print("Of", len(self.db_dict['annotations']['ann_list']), "annotations,", invalid_count, "are invalid")
 
@@ -354,32 +356,113 @@ class Database(object):
             print("Doing first annotation on the list.")
             ann_todo = invalid_anns[0]      
             
-            source_img = self.find_source_from_ann(ann_todo)
+            source_img = self.find_source_from_ann(imagetypes.ImageAnnotation(init_dict=ann_todo))
             if source_img is None:
                 print("ERROR: Could not find source image for annotation")
                 return 
 
-            pil_img = Image.open(source_img['source_path']) 
-            np_img = np.asarray(pil_img)
-            np_img = np.expand_dims(np_img, axis=0)
-            np.savez(".tmp.npz", X=np_img, y=np.zeros(np_img.shape[-1:] + tuple([1])))
-
             # Get contextual images of the source image, and take subimages
             # with padding around the annotation region. Save each of these
             # onto disk and open them up as an image sequence in imagej
+            
+            source_exp = source_img['name'][0:5]
+            if source_exp not in self.db_dict['data']['experiments'].keys():
+                print("ERROR: Could not find source experiment of annotation")
+                return
+
+            print("Found source experiment.")
+            
+            image_array = self.db_dict['data']['experiments'][source_exp]['images']['image_array']
+            image_idx = None
+            for (i, img) in enumerate(image_array):
+                if source_img == img:
+                    image_idx = i
+
+            if image_idx is None:
+                print("ERROR: Could not find index of source image.")
+                return
+
+            print("Found source index.")
+
+            N = 5 
+            l_idx = 0 if image_idx < 20 else image_idx - 20
+            h_idx = len(image_array) - 1 if image_idx + 20 > len(image_array) - 1 else image_idx + 20
+
+            print("Low image index:", l_idx, "\nHigh image index:", h_idx)
+            print("Low image time:", image_array[l_idx]['time'], "hrs\nHigh image index:", image_array[h_idx]['time'], "hrs")
+
+            # To speed up opening Image-J, take annotations with some padding around them
+            if not os.path.exists(".tmp.anns"):
+                os.makedirs(".tmp.anns")
+
+            pad = 64 // 2
+            for i in range(l_idx, h_idx + 1):
+                tmp_pil_img = Image.open(image_array[i]['path']) 
+                tmp_np_img = np.asarray(tmp_pil_img)
+                src_of = ann_todo['X']['source_offset']
+                size = ann_todo['X']['size']
+                tmp_np_img = tmp_np_img[src_of[1]-pad:src_of[1]+size[1]+pad, src_of[0]-pad:src_of[0]+size[0]+pad]
+                Image.fromarray(tmp_np_img).save('.tmp.anns/' + image_array[i]['name'])
+                
+            # Now we construct the macro for ImageJ 
+            macro_str = "run(\"Image Sequence...\", \"open="
+            macro_str = macro_str + ".tmp.anns/" + image_array[l_idx]['name']
+            macro_str = macro_str + " number=" + str(h_idx - l_idx + 1)
+            macro_str = macro_str + " starting=0"  
+            macro_str = macro_str + " increment=1"
+            macro_str = macro_str + " sort\");\n"
+            macro_str = macro_str + "setSlice(" + str(image_idx - l_idx + 1) + ");"
+            macro_file = open(".tmp.ijm", "w+")
+            macro_file.write(macro_str)
+            macro_file.close()
 
             # Open up contextual images in ImageJ, detached (program can proceed) 
-            Popen(["ImageJ-linux64"])
-
+            imagej_proc = Popen(['ImageJ-linux64', '--run', '.tmp.ijm'], stdout=DEVNULL, stderr=DEVNULL)
             # Open up the annotation tool, attached (i.e. program halts here until
             # annotation tool exits)
             
+            pil_img = Image.open(source_img['path']) 
+            np_img = np.asarray(pil_img)
+            src_of = ann_todo['X']['source_offset']
+            s = ann_todo['X']['size']
+            np_img = np_img[src_of[1]:src_of[1]+size[1], src_of[0]:src_of[0]+size[0]]
+            np_img = np.expand_dims(np_img, axis=0)
+            y=np.zeros(np_img.shape[:-1] + tuple([1]))
+            print(y.shape)
+            np.savez(".tmp.npz", X=np_img, y=np.zeros(np_img.shape[:-1] + tuple([1])))
+
+            # TODO: Ask user for their ImageJ and caliban paths
+            caliban_proc = Popen(['python3', 'deepcell-label/desktop/caliban.py', '-rgb', 'RGB', '.tmp.npz'])
+
             # Ask user if they successfully completed the annotation
+            done = input("Did you complete the annotation? [y/n]: ")
+            if done.lower() != 'y':
+                return
 
-            # If no, done
+            ann_done = np.load('.tmp_save_version_0.npz')
+            ann_X, ann_y = np.squeeze(ann_done['X']), np.squeeze(ann_done['y'])
 
-            # If yes, load NPZ, get X and y, then save them to the annotation database
-            # Mark this annotation as valid
+            ann_y = np.uint8((ann_y / np.max(ann_y)) * 255)
+
+            ann_X_img = Image.fromarray(ann_X)
+            ann_y_img = Image.fromarray(ann_y)
+       
+            ann_path = os.path.join("db/anns", str(ann_todo['ann_id']))
+            if not os.path.exists(ann_path):
+                os.makedirs(ann_path)
+
+            ann_X_img.save(os.path.join(ann_path, "X_" + str(ann_todo['ann_id']) + ".jpg"))
+            ann_y_img.save(os.path.join(ann_path, "y_" + str(ann_todo['ann_id']) + ".jpg"))
+
+            ann_todo['valid'] = True
+
+            # Remove tmp images
+            for i in range(l_idx, h_idx + 1):
+                im_path = os.path.join(".tmp.anns/", image_array[i]['name'])
+                if os.path.exists(im_path):
+                    os.remove(im_path)
+
+            another = input("Would you like to do another? [y/n]: ")
 
         return
          
