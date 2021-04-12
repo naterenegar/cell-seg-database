@@ -13,9 +13,11 @@ k = 50
 
 db = database.Database() # Database parser. Looks for a JSON file in the working directory
 
-pool_name = "pool1" # Change or get user input if you have a different pool
-loop_tag = "activeloop1"
+pool_name = "pool3" # Change or get user input if you have a different pool
+loop_tag = "activeloop3"
 (X, metadata) = db.load_image_pool(pool_name)
+
+print(len(metadata['images']))
 
 # Convert to grayscale (is this needed??? How much faster does it really make things?)
 red = X[:, :, :, 0]                                                                                                                
@@ -182,7 +184,7 @@ image_data = metadata['images']
 
 sanns = np.zeros(tuple([len(Sa)]) + X_color.shape[1:])
 sanns_data = []
-for i, idx in enumerate(Sa):
+for i, idx in enumerate(sorted(Sa, reverse=True)):
     sanns[i] = X_color[idx]
     sanns_data.append(copy.deepcopy(image_data[idx]))
     del(image_data[idx])    
