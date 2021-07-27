@@ -7,7 +7,7 @@ import ormar
 import sqlalchemy
 
 DATABASE_URL = "postgresql:///laboncmos"
-database = databases.Database(DATABASE_URL)
+database_handle = databases.Database(DATABASE_URL)
 metadata = sqlalchemy.MetaData()
 
 # note that this step is optional -> all ormar cares is a internal
@@ -15,7 +15,7 @@ metadata = sqlalchemy.MetaData()
 # have to repeat the same parameters if you use only one database
 class BaseMeta(ormar.ModelMeta):
     metadata = metadata
-    database = database
+    database = database_handle
 
 class Experiment(ormar.Model):
     class Meta(BaseMeta):
@@ -34,7 +34,7 @@ class Image(ormar.Model):
     # The reverse relation (Experiment -> Image) is automatically generated
     name: str = ormar.String(primary_key=True, max_length=100)
     path: str = ormar.String(max_length=1000)
-    experiment: Optional[Experiment] = ormar.ForeignKey(Experiment, name="experiment_id")
+    experiment: Optional[Experiment] = ormar.ForeignKey(Experiment)
 
 class ImageAnnotation(ormar.Model):
     class Meta(BaseMeta):
