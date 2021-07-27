@@ -3,11 +3,28 @@ This project provides a way to manage sets of unannotated time series images.
 The need for this stemmed from my own experiences labelling [microscopy
 images](https://ieee-dataport.org/open-access/measurements-cancer-cell-proliferation-using-lab-cmos-capacitance-sensor-time-lapse)
 for a research project, where manual organization, especially when 
-collaborating, was tedious and fatiguing. 
+collaborating, was tedious and error prone.
+
+# Plan
+open source annotation tool <--> custom database gui <--> ormar <--> postgresql (on cloud or lab server)
 
 # Features
-Currently, a lot of desired features are unimplemented, so I'm laying out my
-work here. 
+
+## Use Cases
+Starting from data creation
+- Addition of images + metadata to the database remotely (e.g. during a cell
+  culture, microscope + laptop uploads images to database). It would be nice to
+  have a feed of activity on the database, for example to check if the
+  microscope is in focus during an experiment.
+- Concurrent and remote modification of the database. I think a good way to do
+  this is to lock an image's metadata briefly while the user decides where they
+  want to annotate within the image. Then an Annotation object will be created
+  and appened to the Images list of Annotations. This can be managed with an
+  ORM.
+- Grouping of Images via a GUI. Image a user wants to create a new set of
+  images to be annotated, maybe based on some sort of image property. The user
+  should be able to arbitrarly create sets of images, and then each image will
+  have a list of the sets that it is contained in.
 
 ## Implemented Features
 - Create a new database given a directory structure. Image attributes are
@@ -15,9 +32,8 @@ work here.
 - Matplotlib GUI for creating new (unannotated) annotation set from pool of
   images.
 
-## Planned Features
-
-### Integrate an active learning loop into the database Might look like this:
+### Integrate an active learning loop into the database 
+Might look like this:
 - Pull JSON files describing which pixels of which images are annotated
 - Construct training set from these annotated pixels (usually in the form of
   256x256 subimages)
@@ -54,3 +70,4 @@ Requires `python3` and some packages:
 - cv2
 
 TODO: put all required packages into `pip`-style requirements.txt
+TODO: Move away from manual management of the directory structure.
