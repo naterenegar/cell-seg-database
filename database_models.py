@@ -1,5 +1,6 @@
-from typing import Optional
+from typing import Optional, List
 
+import datetime
 import databases
 import pydantic
 
@@ -10,6 +11,7 @@ DATABASE_URL = "postgresql:///laboncmos"
 database_handle = databases.Database(DATABASE_URL)
 metadata = sqlalchemy.MetaData()
 engine = sqlalchemy.create_engine(DATABASE_URL)
+metadata.drop_all(engine)
 
 #### DATA GROUPINGS ####
 
@@ -21,7 +23,7 @@ class DataType(ormar.Model):
     class Meta(BaseMeta):
         tablename: str = "datatypes"
 
-    typename: str = ormar.String(primary_key=True, max_lenth=1000)
+    typename: str = ormar.String(primary_key=True, max_length=1000)
 
 class Experiment(ormar.Model):
     class Meta(BaseMeta):
@@ -63,11 +65,12 @@ class CapacitanceTrace(ormar.Model):
     class Meta(BaseMeta):
         tablename: str = "capacitance_traces"
 
-    experiment: Optional[Experiment] = ormar.ForeignKey(Experiment)
+    id: int = ormar.Integer(primary_key=True)
     channel: int = ormar.Integer(minimum=0)
     sample_freq: float = ormar.Float(minimum=0)
     sample_offset: float = ormar.Float(minimum=0) # Offset of first sample
 
+    experiment: Optional[Experiment] = ormar.ForeignKey(Experiment)
 
 # TODO: Image base class:
 
@@ -124,7 +127,7 @@ class ImageAnnotation(ormar.Model):
     created_on: datetime.datetime = ormar.DateTime()
 
     # Last update times
-    updated_by: str = ormar.String(max_lengh=200) 
+    updated_by: str = ormar.String(max_length=200) 
     updated_on: datetime.datetime = ormar.DateTime()
     
     # Measures annotation time from view of database 
