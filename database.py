@@ -9,6 +9,7 @@ import json
 import random
 import copy
 from subprocess import Popen, DEVNULL, run
+from shutil import copyfile
 
 # Addon packages 
 import numpy as np
@@ -48,12 +49,14 @@ class Database(object):
         self.dirty = True
         self.prompt = "ann-database> "
 
-        self.cmd_handlers = {'import-anns': self.cmd_handler_import_annotation,
-                             'exit': self.save,
-                             'create-anns': self.cmd_handler_create_anns,
-                             'create-pool': self.cmd_handler_create_image_pool,
+        self.cmd_handlers = {'import-anns':  self.cmd_handler_import_annotation,
+                             'exit':         self.save,
+                             'create-anns':  self.cmd_handler_create_anns,
+                             'create-pool':  self.cmd_handler_create_image_pool,
                              'list-invalid': self.cmd_handler_list_invalid_anns,
-                             'do-ann': self.cmd_handler_do_annotation}
+                             'list-anns':    self.cmd_handler_list_anns,
+                             'do-ann':       self.cmd_handler_do_annotation,
+                             'create-ball':  self.create_ann_ball}
 
         try:
             self.db_dict = json.load(self.dbf_init)
@@ -312,19 +315,68 @@ class Database(object):
         return source_img
 
     def cmd_handler_list_invalid_anns(self, args):
+        ann_list = self.find_anns_by_tags(args)
         invalid_count = 0
-        for ann in self.db_dict['annotations']['ann_list']:
+        for ann in ann_list:
             if ann['valid'] == False:
                 invalid_count = invalid_count + 1
                 ann_str = str(ann['ann_id']) + ": "
                 ann_str = ann_str + ann['X']['source_name'] + ", " + str(tuple(ann['X']['source_offset']))
                 print(ann_str)
 
-        print("Of", len(self.db_dict['annotations']['ann_list']), "annotations,", invalid_count, "are invalid")
+        print("Of", len(ann_list), "annotations,", invalid_count, "are invalid")
 
-    # Args is a list of tags
-    def cmd_handler_do_annotation(self, args):
-   
+    def cmd_handler_list_anns(self, args):
+        ann_list = self.find_anns_by_tags(args)
+        for ann in ann_list:
+            ann_str = str(ann['ann_id']) + ": "
+            ann_str = ann_str + ann['X']['source_name'] + ", " + str(tuple(ann['X']['source_offset']))
+            print(ann_str)
+
+    def find_anns_by_tags(self, args, valid=None):
+        tags = self.tag_helper(args)
+        tag = ""
+        if len(tags) > 1:
+            print("WARNING: Only using first tag. Multi-tag search unimplemented")
+        if len(tags) == 0:
+            return self.db_dict['annotations']['ann_list']
+        tag = tags[0]
+        ann_list = []
+        for ann in self.db_dict['annotations']['ann_list']:
+            if tag in ann['tags']:
+                ann_list.append(ann)
+
+        return ann_list
+
+    def create_ann_ball(self, args):
+        directory = args[-1]
+
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        tags = self.tag_helper(args)
+        print(tags)
+        tag = ""
+        if len(tags) > 1:
+            print("WARNING: Only using first tag. Multi-tag search unimplemented")
+        tag = None if len(tags) < 1 else tags[0]
+        print(tag)
+
+        for ann in self.db_dict['annotations']['ann_list']:
+            tag_match = tag in ann['tags']
+            valid = ann['valid']
+            if tag_match and valid:
+                num = str(ann['ann_id'])
+                xname = "X_" + num + ".png"
+                yname = "y_" + num + ".png"
+                ann_x_dir = os.path.join("db/anns", num, xname) 
+                ann_y_dir = os.path.join("db/anns", num, yname) 
+                new_x_dir = os.path.join(directory, xname)
+                new_y_dir = os.path.join(directory, yname)
+                copyfile(ann_x_dir, new_x_dir)
+                copyfile(ann_y_dir, new_y_dir)
+
+    def tag_helper(self, args):
         tag_str = ""
         tags = []
         for arg in args:
@@ -333,27 +385,45 @@ class Database(object):
                 tags.append(str(arg).strip())
         if len(args) > 0:
             print("Looking for annotations with these tags:", tag_str)
-    
+
+        return tags
+
+    # Args is a list of tags
+    def cmd_handler_do_annotation(self, args):
+        tags = self.tag_helper(args)
         tag = ""
         if len(tags) > 1:
             print("WARNING: Only using first tag. Multi-tag search unimplemented")
-            tag = tags[0]
-
+        tag = "" if len(tags) < 1 else tags[0]
+        print(tag)
         # First, look for unfinished annotations
         invalid_anns = []
         for ann in self.db_dict['annotations']['ann_list']:
             if ann['valid'] == False:
                 invalid_anns.append(ann)
-    
+   
+        tag_idx = []
         if tag != "":
-            for ann in invalid_anns:
+            for (i, ann) in enumerate(invalid_anns):
                 if tag not in ann['tags']:
-                    invalid_anns.remove(ann) 
+                    tag_idx.append(i)
+        for idx in sorted(tag_idx, reverse=True):
+            del(invalid_anns[idx])
+
+        # Time filtering
+#        time_idx = []
+#        for (i, ann) in enumerate(invalid_anns):
+#            source_img = self.find_source_from_ann(imagetypes.ImageAnnotation(init_dict=ann))
+#            if source_img['time'] > 35:
+#                time_idx.append(i)
+#        for idx in sorted(time_idx, reverse=True):
+#            del(invalid_anns[idx])
 
         print("Found", len(invalid_anns), "unfinished annotations matching given criteria...")
         
-        if len(invalid_anns) > 0:
-            print("Doing first annotation on the list.")
+        another = True
+        while len(invalid_anns) > 0 and another:
+            print("Annotating ", invalid_anns[0]['X']['source_name'])
             ann_todo = invalid_anns[0]      
             
             source_img = self.find_source_from_ann(imagetypes.ImageAnnotation(init_dict=ann_todo))
@@ -384,9 +454,10 @@ class Database(object):
 
             print("Found source index.")
 
-            N = 5 
-            l_idx = 0 if image_idx < 20 else image_idx - 20
-            h_idx = len(image_array) - 1 if image_idx + 20 > len(image_array) - 1 else image_idx + 20
+            N = 40 
+            l_idx = 0 if image_idx < N else image_idx - N
+#            h_idx = len(image_array) - 1 if image_idx + N > len(image_array) - 1 else image_idx + N \
+            h_idx = image_idx
 
             print("Low image index:", l_idx, "\nHigh image index:", h_idx)
             print("Low image time:", image_array[l_idx]['time'], "hrs\nHigh image index:", image_array[h_idx]['time'], "hrs")
@@ -451,8 +522,8 @@ class Database(object):
             if not os.path.exists(ann_path):
                 os.makedirs(ann_path)
 
-            ann_X_img.save(os.path.join(ann_path, "X_" + str(ann_todo['ann_id']) + ".jpg"))
-            ann_y_img.save(os.path.join(ann_path, "y_" + str(ann_todo['ann_id']) + ".jpg"))
+            ann_X_img.save(os.path.join(ann_path, "X_" + str(ann_todo['ann_id']) + ".png"))
+            ann_y_img.save(os.path.join(ann_path, "y_" + str(ann_todo['ann_id']) + ".png"))
 
             ann_todo['valid'] = True
 
@@ -462,7 +533,8 @@ class Database(object):
                 if os.path.exists(im_path):
                     os.remove(im_path)
 
-            another = input("Would you like to do another? [y/n]: ")
+            another = False if input("Would you like to do another? [y/n]: ").lower() != 'y' else True
+            del(invalid_anns[0])
 
         return
          

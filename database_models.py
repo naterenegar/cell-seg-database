@@ -92,6 +92,41 @@ class SourceImage(ormar.Model):
 
     experiment: Optional[Experiment] = ormar.ForeignKey(Experiment)
 
+class ImageAnnotation(ormar.Model):
+    class Meta(BaseMeta):
+        tablename: str = "annotations"
+
+    id: int = ormar.Integer(primary_key=True)
+    path: str = ormar.String(max_length=1000)
+
+    # Current annotation status
+    in_progress: bool = ormar.Boolean(default=False)
+    finished: bool = ormar.Boolean(default=False)
+
+    # Creation times
+    created_by: str = ormar.String(max_length=200)
+    created_on: datetime.datetime = ormar.DateTime()
+
+    # Last update times
+    updated_by: Optional[str] = ormar.String(max_length=200) 
+    updated_on: Optional[datetime.datetime] = ormar.DateTime()
+    
+    # Measures annotation time from view of database 
+    started_at: Optional[datetime.datetime] = ormar.DateTime()
+    finished_at: Optional[datetime.datetime] = ormar.DateTime()
+
+    # Offset in source image. Implicity defines the resolution
+    source_x1: int = ormar.Integer()
+    source_y1: int = ormar.Integer()
+    source_x2: int = ormar.Integer()
+    source_y2: int = ormar.Integer()
+
+    cell_count: int = ormar.Integer(minimum=0)
+    cell_morphology: str = ormar.String(max_length=100) # "balled", "intermediate", "adhered"?
+
+    source_image: Optional[SourceImage] = ormar.ForeignKey(SourceImage)
+    memberships: Optional[List[LabeledPool]] = ormar.ManyToMany(LabeledPool)
+
 # Sample Images
 class SampleImage(ormar.Model):
     class Meta(BaseMeta):
@@ -110,38 +145,4 @@ class SampleImage(ormar.Model):
 
     source_image: Optional[SourceImage] = ormar.ForeignKey(SourceImage)
     memberships: Optional[List[ImagePool]] = ormar.ManyToMany(ImagePool)
-
-class ImageAnnotation(ormar.Model):
-    class Meta(BaseMeta):
-        tablename: str = "annotations"
-
-    id: int = ormar.Integer(primary_key=True)
-    path: str = ormar.String(max_length=1000)
-
-    # Current annotation status
-    in_progress: bool = ormar.Boolean()
-    finished: bool = ormar.Boolean()
-
-    # Creation times
-    created_by: str = ormar.String(max_length=200)
-    created_on: datetime.datetime = ormar.DateTime()
-
-    # Last update times
-    updated_by: str = ormar.String(max_length=200) 
-    updated_on: datetime.datetime = ormar.DateTime()
-    
-    # Measures annotation time from view of database 
-    started_at: datetime.datetime = ormar.DateTime()
-    finished_at: datetime.datetime = ormar.DateTime()
-
-    # Offset in source image. Implicity defines the resolution
-    source_x1: int = ormar.Integer()
-    source_y1: int = ormar.Integer()
-    source_x2: int = ormar.Integer()
-    source_y2: int = ormar.Integer()
-
-    cell_count: int = ormar.Integer()
-    cell_morphology: str = ormar.String(max_length=100) # "balled", "intermediate", "adhered"?
-
-    source_image: Optional[SourceImage] = ormar.ForeignKey(SourceImage)
-    memberships: Optional[List[LabeledPool]] = ormar.ManyToMany(LabeledPool)
+    annotation: Optional[ImageAnnotation] = ormar.ForeignKey(ImageAnnotation)
