@@ -45,9 +45,14 @@ async def main():
                                                  datatypes=exp_dt_list)
         db_exp_list.append(db_exp)
         for image in exps[exp]["images"]["image_array"]:
+            path = image["path"] 
+            if image["path"] == "":
+                path = "db/exps/" + exp + "/images/" + image["name"]
+
             db_image = await SourceImage.objects.create(name=image["name"],
-                                                        path=image["path"],
                                                         time=image["time"],
+                                                        s3_key=image["path"],
+                                                        s3_bucket="laboncmosdata",
                                                         num_channels=3,
                                                         image_resx=image["resolution"][0],
                                                         image_resy=image["resolution"][1],
@@ -64,16 +69,20 @@ async def main():
                         ann_alt = ann_entry
                         break
 
+
+                path = ann_alt["y"]["path"] 
                 finished = ann_alt["valid"]
+                if path == "" and finished:
+                    path = "db/anns/" + str(ann_id) + "/y_" + str(ann_id) + ".png"
+                    print(path)
+
                 memberships = [labeled_sets[t] for t in ann_alt["tags"]]
 
-                for m in memberships:
-                    num_images = m.num_images
-                    await m.update(num_images=num_images+1)
 
                 # ann_id+1 since primary key must be > 0 
                 ormar_ann = await ImageAnnotation(id=ann_id+1, 
-                                                  path="",
+                                                  s3_key=path,
+                                                  s3_bucket="laboncmosdata",
                                                   in_progress=False,
                                                   finished=finished,
                                                   created_by="Nathan Renegar",
@@ -88,11 +97,11 @@ async def main():
                                                   source_y2=y2,
                                                   cell_count=0,
                                                   cell_morphology="balled",
-                                                  source_image=db_image,
-                                                  memberships=memberships).save()
-
-    # TODO: Add capacitance traces
-    # TODO: Add pools
+                                                  source_image=db_image,).save()
+                for m in memberships:
+                    num_images = m.num_images
+                    await ormar_ann.memberships.add(m)
+                    await m.update(num_images=num_images+1)
 
 db_exp_list = asyncio.run(main())
 print(db_exp_list)

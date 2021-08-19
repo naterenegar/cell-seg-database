@@ -1,9 +1,7 @@
 from typing import Optional, List
-
 import datetime
 import databases
 import pydantic
-
 import ormar
 import sqlalchemy
 
@@ -36,11 +34,7 @@ class Experiment(ormar.Model):
 
     datatypes: Optional[List[DataType]] = ormar.ManyToMany(DataType)
 
-    # TODO: For clarity, explicitly list the reverse foreign keys
-    #   source images
-    #   capcitance traces
-    #   ...
-    # We should be able to add more datatypes without breaking anything (?)
+    # TODO: We should be able to add more datatypes without breaking anything (?)
 
 class ImagePool(ormar.Model):
     class Meta(BaseMeta):
@@ -58,9 +52,6 @@ class LabeledPool(ormar.Model):
 
 #### DATA ####
 
-# TODO: May make sense to make a base class that has all of the necessary
-# metadata to find the data in the S3 Bucket (i.e. S3 URI, bucket name)
-
 class CapacitanceTrace(ormar.Model):
     class Meta(BaseMeta):
         tablename: str = "capacitance_traces"
@@ -72,8 +63,6 @@ class CapacitanceTrace(ormar.Model):
 
     experiment: Optional[Experiment] = ormar.ForeignKey(Experiment)
 
-# TODO: Image base class:
-
 # Source Images are the post-processed full size images taken during the
 # experiment.
 class SourceImage(ormar.Model):
@@ -82,7 +71,8 @@ class SourceImage(ormar.Model):
 
     name: str = ormar.String(primary_key=True, max_length=200)
 
-    path: str = ormar.String(max_length=1000) # TODO: Change to S3 location
+    s3_key: str = ormar.String(max_length=1000, min_length=1)
+    s3_bucket: str = ormar.String(min_length=1, max_length=1000)
 
     time: float = ormar.Float(minimum=0)
     num_channels: int = ormar.Integer(minimum=0)
@@ -97,7 +87,8 @@ class ImageAnnotation(ormar.Model):
         tablename: str = "annotations"
 
     id: int = ormar.Integer(primary_key=True)
-    path: str = ormar.String(max_length=1000)
+    s3_key: str = ormar.String(max_length=1000)
+    s3_bucket: str = ormar.String(min_length=1, max_length=1000)
 
     # Current annotation status
     in_progress: bool = ormar.Boolean(default=False)
@@ -133,7 +124,8 @@ class SampleImage(ormar.Model):
         tablename: str = "sample_images"
 
     id: int = ormar.Integer(primary_key=True)
-    path: str = ormar.String(max_length=1000)
+    s3_key: str = ormar.String(max_length=1000)
+    s3_bucket: str = ormar.String(min_length=1, max_length=1000)
 
     num_channels: int = ormar.Integer(minimum=0)
 
