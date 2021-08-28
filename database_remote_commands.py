@@ -14,7 +14,6 @@ from shutil import copyfile
 # Addon packages 
 import numpy as np
 from PIL import Image
-import cv2
 from datetime import datetime
 
 from database_models import * 
