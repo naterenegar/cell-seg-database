@@ -14,7 +14,17 @@ Software:
 Python package dependencies can be found in the `requirements.txt` file.  The
 use of a virtual environment is recommended. 
 
-## Linux
+## Ubuntu/Debian 
+Get the required packages
+```
+sudo apt-get install python3.7 python3.7-venv awscli
+```
+
+Enter your access key and private access key for the AWS resources (contact your AWS administrator to receive these)
+```
+aws configure
+```
+
 Clone the annotation tools
 ```
 git submodule init
@@ -33,7 +43,10 @@ Start the database
 python start_database.py 
 ```
 
-## Windows (cmd)
+## Windows
+Follow these [instructions](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-windows.html) to install the AWS-CLI. Register your AWS credentials by running `aws configure`.
+
+
 Clone the annotation tools
 ```
 git submodule init
@@ -42,6 +55,7 @@ git submodule update
 
 Get the python environment set up
 ```
+python3.7 -m pip install --user virtualenv
 python3.7 -m venv venv # create a virtual environment
 venv\Scripts\activate.bat # activate the environment
 pip install -r requirements.txt # install packages, but only in the virtual environment
