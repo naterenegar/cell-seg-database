@@ -74,7 +74,9 @@ async def main():
                 finished = ann_alt["valid"]
                 if path == "" and finished:
                     path = "db/anns/" + str(ann_id) + "/y_" + str(ann_id) + ".png"
+                    sample_path = "db/anns/" + str(ann_id) + "/X_" + str(ann_id) + ".jpg"
                     print(path)
+                    print(sample_path)
 
                 memberships = [labeled_sets[t] for t in ann_alt["tags"]]
 
@@ -97,7 +99,19 @@ async def main():
                                                   source_y2=y2,
                                                   cell_count=0,
                                                   cell_morphology="balled",
-                                                  source_image=db_image,).save()
+                                                  source_image=db_image).save()
+
+                sample_image = await SampleImage(id=ann_id+1,
+                                                 s3_key=sample_path,
+                                                 s3_bucket="laboncmosdata",
+                                                 num_channels=3,
+                                                 source_x1=x1,
+                                                 source_x2=x2,
+                                                 source_y1=y1,
+                                                 source_y2=y2,
+                                                 source_image=db_image,
+                                                 annotation=ormar_ann).save()
+
                 for m in memberships:
                     num_images = m.num_images
                     await ormar_ann.memberships.add(m)

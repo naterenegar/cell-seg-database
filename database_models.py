@@ -70,7 +70,6 @@ class SourceImage(ormar.Model):
         tablename: str = "images"
 
     name: str = ormar.String(primary_key=True, max_length=200)
-
     s3_key: str = ormar.String(max_length=1000, min_length=1)
     s3_bucket: str = ormar.String(min_length=1, max_length=1000)
 
@@ -118,6 +117,12 @@ class ImageAnnotation(ormar.Model):
     source_image: Optional[SourceImage] = ormar.ForeignKey(SourceImage)
     memberships: Optional[List[LabeledPool]] = ormar.ManyToMany(LabeledPool)
 
+    def get_image_size(self):
+        return (self.source_x2 - self.source_x1, self.source_y2 - self.source_y1)
+
+    def get_source_offset(self):
+        return ((self.source_x1, self.source_y1), (self.source_x2, self.source_y2))
+
 # Sample Images
 class SampleImage(ormar.Model):
     class Meta(BaseMeta):
@@ -138,3 +143,9 @@ class SampleImage(ormar.Model):
     source_image: Optional[SourceImage] = ormar.ForeignKey(SourceImage)
     memberships: Optional[List[ImagePool]] = ormar.ManyToMany(ImagePool)
     annotation: Optional[ImageAnnotation] = ormar.ForeignKey(ImageAnnotation)
+
+    def get_image_size(self):
+        return (self.source_x2 - self.source_x1, self.source_y2 - self.source_y1)
+
+    def get_source_offset(self):
+        return ((self.source_x1, self.source_y1), (self.source_x2, self.source_y2))

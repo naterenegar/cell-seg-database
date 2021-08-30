@@ -5,7 +5,12 @@ import sqlalchemy
 import asyncio
 import datetime
 import database_remote_commands
+import asyncpg
+
 
 db = database_remote_commands.Database(database_handle, metadata, engine)
-db.start_db()
+try:
+    db.start_db()
+except asyncpg.exceptions.InvalidPasswordError:
+    print("Incorrect password.")
 

@@ -1,6 +1,8 @@
 from PIL import Image
 import numpy as np
 from datetime import datetime
+from subprocess import Popen, DEVNULL, run
+import os.path
 
 from database_models import * 
 import asyncio
@@ -19,8 +21,16 @@ def load_image(infilename):
     data = np.asarray(img)
     return data
 
-def save_image(im, outfilename):
-    Image.fromarray(im).save(outfilename)
+def save_image(im, outfilename, grayscale=False):
+    if grayscale is True:
+        Image.fromarray(im).convert("L").save(outfilename)
+    else:
+        Image.fromarray(im).save(outfilename)
+
+def get_yes_no(question):
+    result = input(question + " [y/n]: ")
+    result = True if result.lower() == 'y' else False
+    return result
 
 class Database(object):
 
@@ -74,36 +84,41 @@ class Database(object):
         if "id" not in args.keys():
             print("    Must provide named argument \"id\" with do_annotation")
         
-#        try:
         ann = await ImageAnnotation.objects.get(id=int(args["id"]))
+        key = ""
         if ann.s3_key == "":
+            key = "db/anns/" + str(args["id"]) + "/y_" + str(args["id"]) + ".png"
             print("    Annotation is blank. Creating new annotation")
 
             source_image = await SourceImage.objects.get(name=ann.source_image.name)
-            x1, x2, y1, y2 = ann.source_x1, ann.source_x2, ann.source_y1, ann.source_y2
-            size = (x2 - x1, y2 - y1)
-            crop = ((x1, y1), (x2, y2))
+            size = ann.get_image_size() 
+            crop = ann.get_source_offset()
+
             tmp_filename = '.tmp.anns/src.png'
+            print("    Fetching source image...")
             with open(tmp_filename, 'wb') as f:
                 self.s3_handle.download_fileobj(self.bucket, source_image.s3_key, f)
+            print("    Source image downloaded. Opening annotation tool")
             im = load_image(tmp_filename)
             X = np.expand_dims(crop_image(im, crop), axis=0)
             y = np.expand_dims(np.expand_dims(np.zeros(size), axis=-1), axis=0)
             print(y.shape)
-            np.savez('.tmp.anns/ann.npz', X=X, y=y)
+            np.savez('.tmp.npz', X=X, y=y)
 
         else:
+            key = ann.s3_key
             print("    Annotation exists in database. Update? [y/n]: ")
 
-            # TODO: Create if this doesn't exist
             with open('.tmp.anns/ann.png', 'wb') as f:
                 self.s3_handle.download_fileobj(self.bucket, ann.s3_key, f)
     
-        print("    Image fetched successfully")
+        caliban_proc = Popen(['python3', 'deepcell-label/desktop/caliban.py', '-rgb', 'RGB', '.tmp.npz'])
 
-#        except:
-#            print("    Annotation with id", str(args["id"]), "not found.")
-#            return
+        if get_yes_no("Did you complete the annotation?") and os.path.isfile('.tmp_save_version_0.npz'):
+            finished_ann = np.load('.tmp_save_version_0.npz')
+            save_image(np.squeeze(finished_ann['y']), ".tmp.upload.png", grayscale=True)
+            self.s3_handle.upload_file(".tmp.upload.png", self.bucket, key)
+
 
     # WARNING: This hands over control from the main program to the object 
     async def start_command_CLI(self):
