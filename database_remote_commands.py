@@ -2,7 +2,7 @@ from PIL import Image
 import numpy as np
 from datetime import datetime
 from subprocess import Popen, DEVNULL, run
-import os.path
+import os
 
 from database_models import * 
 import asyncio
@@ -46,6 +46,10 @@ class Database(object):
                              'list-anns':    self.cmd_handler_list_anns,
                              'do-ann':       self.cmd_handler_do_annotation,
                             }
+        # Make sure all of our directories are made
+        if not os.path.exists('.tmp.anns/'):
+            os.mkdir('.tmp.anns/')
+
         try:
             self.s3_handle = boto3.client('s3') 
         except:
