@@ -1,0 +1,3 @@
+[submodule "deepcell-label"]
+	path = deepcell-label
+	url = https://github.com/naterenegar/deepcell-label.git
