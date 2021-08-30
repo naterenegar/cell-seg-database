@@ -5,17 +5,55 @@ couple of different tools.
 
 # Requirements
 Software:
-- python3.7 or later
+- python3.7
+- python3.7 venv
 - git
 - AWS CLI
+- deepcell-label
 
-Python package dependencies can be found in the `requirements.txt` file, and can be installed with
+Python package dependencies can be found in the `requirements.txt` file.  The
+use of a virtual environment is recommended. 
+
+## Linux
+Clone the annotation tools
 ```
-python -m pip instal -r requirements.txt
+git submodule init
+git submodule update
+```
+
+Get the python environment set up
+```
+python3.7 -m venv venv # create a virtual environment
+source venv/bin/activate # activate the environment
+pip install -r requirements.txt # install packages, but only in the virtual environment
+```
+
+Start the database
+```
+python start_database.py 
+```
+
+## Windows (cmd)
+Clone the annotation tools
+```
+git submodule init
+git submodule update
+```
+
+Get the python environment set up
+```
+python3.7 -m venv venv # create a virtual environment
+venv\Scripts\activate.bat # activate the environment
+pip install -r requirements.txt # install packages, but only in the virtual environment
+```
+
+Start the database
+```
+python start_database.py 
 ```
 
 # TODO:
-- Convert the `sequencer.py` gui code from `matplotlib` to something actually fast (open to web based)
+- Convert the `sequencer.py` GUI code from `matplotlib` to something actually fast (open to web based)
 - Put all required packages into `pip`-style requirements.txt
 - Fork the annotation tool and git-submodule it
 - Add code to register a database and s3 bucket with the code. Right now this is hard-coded
