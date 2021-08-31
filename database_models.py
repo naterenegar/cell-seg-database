@@ -4,12 +4,39 @@ import databases
 import pydantic
 import ormar
 import sqlalchemy
+import os
+import configparser
 
-DATABASE_URL = "postgresql:///laboncmos"
+# Get the database config
+db_config_name = 'db.config'
+if not os.path.exists(db_config_name):
+    db_config_name = input("Could not find database configuration file. Please enter the path to the file: ")
+
+if not os.path.exists(db_config_name):
+    print(db_config_name, "does not exist. Exiting")
+    exit(0)
+
+# Parse the database config
+db_config = configparser.ConfigParser()
+db_config.read(db_config_name)
+
+# TODO: Add option to select from more than one db
+str_data = db_config['DEFAULT']
+
+dbtype = str_data['dbtype']
+user = str_data['user']
+pwd = str_data['password']
+host = str_data['host']
+port = str_data['port']
+db_name = str_data['database']
+
+DATABASE_URL = dbtype + '://' + user + ':' + pwd + '@' + host + ':' + port + '/' + db_name
 database_handle = databases.Database(DATABASE_URL)
 metadata = sqlalchemy.MetaData()
 engine = sqlalchemy.create_engine(DATABASE_URL)
 metadata.drop_all(engine)
+del DATABASE_URL
+del pwd
 
 #### DATA GROUPINGS ####
 
