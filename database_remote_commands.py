@@ -23,7 +23,7 @@ def load_image(infilename):
 
 def save_image(im, outfilename, grayscale=False):
     if grayscale is True:
-        Image.fromarray(im).convert("L").save(outfilename)
+        Image.fromarray(im).save(outfilename)
     else:
         Image.fromarray(im).save(outfilename)
 
@@ -98,9 +98,7 @@ class Database(object):
         if not annotation_blank:
             with open(ann_filename, 'wb') as f:
                 self.s3_handle.download_fileobj(self.bucket, ann_s3_key, f)
-                y = load_image(ann_filename)
-                print(y.shape) 
-
+            y = load_image(ann_filename)
         y = np.expand_dims(np.expand_dims(y, axis=-1), axis=0)
         np.savez('.tmp.npz', X=X, y=y)
 
@@ -159,9 +157,8 @@ class Database(object):
             # Upload annotation
             finished_ann = np.load('.tmp_save_version_0.npz')
 
-            y = finished_ann['y']
-            y = (((y - y.min()) / (y.max() - y.min())) * 255.9).astype(np.uint8) 
-            save_image(np.squeeze(y).astype(np.uint8), ".tmp.upload.png", grayscale=True)
+            y = finished_ann['y'].astype(np.uint8)
+            save_image(np.squeeze(y), ".tmp.upload.png", grayscale=True)
             self.s3_handle.upload_file(".tmp.upload.png", self.bucket, key)
 
             # Update annotation metadata
