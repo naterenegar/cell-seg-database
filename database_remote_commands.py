@@ -3,6 +3,7 @@ import numpy as np
 from datetime import datetime
 from subprocess import Popen, DEVNULL, run
 import os
+from operator import itemgetter
 
 from database_models import * 
 import asyncio
@@ -108,6 +109,12 @@ class Database(object):
         if os.path.exists('.tmp.npz'):
             os.remove('.tmp.npz')
 
+        files = [x for x in os.listdir('./') if '.tmp_save_version_' in x]
+        for f in files:
+            if os.path.exists(f):
+                os.remove(f)
+        
+
         if os.path.exists('.tmp_save_version_0.npz'):
             os.remove('.tmp_save_version_0.npz')
 
@@ -139,6 +146,8 @@ class Database(object):
             key = ann.s3_key
 
             print("    Fetching source image and annotation...")
+            print(source_image.s3_key)
+            print(key, crop, size)
             self.fetch_and_pack_image(source_image.s3_key, 
                                       key, 
                                       crop, 
@@ -154,8 +163,12 @@ class Database(object):
 
         if get_yes_no("Did you complete the annotation?") and os.path.isfile('.tmp_save_version_0.npz'):
 
+            files = [x for x in os.listdir('./') if '.tmp_save_version_' in x]
+            save_versions = [int(x.split('.tmp_save_version_')[1].split(".npz")[0]) for x in files]
+            max_idx = max(enumerate(save_versions),key=itemgetter(1))[0]
+
             # Upload annotation
-            finished_ann = np.load('.tmp_save_version_0.npz')
+            finished_ann = np.load(files[max_idx])
 
             y = finished_ann['y'].astype(np.uint8)
             save_image(np.squeeze(y), ".tmp.upload.png", grayscale=True)
